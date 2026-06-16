@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1e2d45 transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #1e2d45;
+  border-radius: 4px;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(1200px 600px at 80% -10%, #16243b 0%, #0a0e14 55%);
+  color: #e6edf3;
+  font-family: "Inter", system-ui, sans-serif;
+  min-height: 100vh;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-ink-border bg-ink-card/80 backdrop-blur
+      shadow-[0_8px_30px_rgba(0,0,0,0.35)];
+  }
+  .btn {
+    @apply inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold
+      transition-all disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-brand text-black hover:bg-brand-dark hover:text-white;
+  }
+  .btn-ghost {
+    @apply btn border border-ink-border text-slate-200 hover:bg-ink-700;
+  }
+  .input {
+    @apply w-full rounded-xl border border-ink-border bg-ink-900/60 px-3 py-2
+      text-sm text-slate-100 outline-none focus:border-brand;
+  }
+  .label {
+    @apply text-xs font-medium uppercase tracking-wide text-slate-400;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+}

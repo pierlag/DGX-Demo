@@ -1,0 +1,26 @@
+# --- Web framework ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+python-multipart==0.0.20
+aiofiles==24.1.0
+httpx==0.28.1
+websockets==14.1
+
+# --- Models / HuggingFace ---
+huggingface_hub==0.27.1
+
+# --- Vector DB + embeddings (fastembed = ONNX, ARM-friendly, no torch) ---
+qdrant-client[fastembed]==1.12.2
+
+# --- GPU / system monitoring ---
+nvidia-ml-py==12.560.30
+psutil==6.1.1
+
+# --- MCP server ---
+mcp>=1.9
+
+# --- Document parsing for RAG ---
+pypdf==5.1.0
+python-docx==1.1.2

@@ -1,0 +1,18 @@
+# Python
+backend/.venv/
+__pycache__/
+*.pyc
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Data
+data/
+appdata/
+ragdoclocal/*
+!ragdoclocal/README.md
+!ragdoclocal/sample-dgx-spark.md
+
+# Env
+.env
