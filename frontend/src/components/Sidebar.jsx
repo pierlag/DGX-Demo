@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -21,13 +21,48 @@ const links = [
   { to: "/chat", label: "Chat de test", icon: MessagesSquare },
 ];
 
-export default function Sidebar({ connected }) {
+export default function Sidebar({
+  connected,
+  kioskMode = false,
+  onKioskToggle,
+  open = false,
+  onClose,
+}) {
+  const clickCountRef = useRef(0);
+  const clickTimerRef = useRef(null);
+
+  const visibleLinks = kioskMode
+    ? links.filter((l) => l.to === "/" || l.to === "/chat")
+    : links;
+
+  const onLogoClick = () => {
+    clickCountRef.current += 1;
+    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+    if (clickCountRef.current >= 5) {
+      clickCountRef.current = 0;
+      onKioskToggle?.();
+      return;
+    }
+    clickTimerRef.current = setTimeout(() => {
+      clickCountRef.current = 0;
+    }, 2500);
+  };
+
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r border-ink-border bg-ink-900/60 p-4">
+    <aside
+      className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 transform flex-col border-r border-ink-border bg-ink-900 p-4 transition-transform duration-200 lg:static lg:z-auto lg:translate-x-0 lg:bg-ink-900/60 ${
+        open ? "translate-x-0" : "-translate-x-full"
+      }`}
+    >
       <div className="mb-8 flex items-center gap-3 px-2">
-        <div className="grid h-10 w-10 place-items-center rounded-xl bg-brand text-black font-extrabold">
+        <button
+          type="button"
+          aria-label="Basculer le mode kiosk"
+          onClick={onLogoClick}
+          className="grid h-10 w-10 place-items-center rounded-xl bg-brand text-black font-extrabold"
+        >
           v
-        </div>
+        </button>
         <div>
           <div className="text-lg font-extrabold leading-none text-white">vibeMCP</div>
           <div className="text-[11px] font-medium text-brand">DGX Spark · GB10</div>
@@ -35,11 +70,12 @@ export default function Sidebar({ connected }) {
       </div>
 
       <nav className="flex flex-1 flex-col gap-1">
-        {links.map(({ to, label, icon: Icon, end }) => (
+        {visibleLinks.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
             end={end}
+            onClick={() => onClose?.()}
             className={({ isActive }) =>
               `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
                 isActive

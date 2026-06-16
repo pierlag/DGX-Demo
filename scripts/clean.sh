@@ -23,6 +23,11 @@ pkill -9 -f "vite" 2>/dev/null || true
 # Stopper les tunnels DevTunnel (devtunnel host)
 pkill -9 -f "devtunnel host" 2>/dev/null || true
 
+# Supprimer tous les tunnels DevTunnel configurés
+if command -v devtunnel >/dev/null 2>&1; then
+  devtunnel delete-all -f >/dev/null 2>&1 || devtunnel delete-all >/dev/null 2>&1 || true
+fi
+
 # 2) Libérer explicitement les ports si encore occupés
 if lsof -i :8000 -sTCP:LISTEN >/dev/null 2>&1; then
   kill -9 "$(lsof -t -i :8000 | head -1)" 2>/dev/null || true

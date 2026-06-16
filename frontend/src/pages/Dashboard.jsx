@@ -17,7 +17,10 @@ import {
   Timer,
   Zap,
   Thermometer,
+  Smartphone,
+  QrCode,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { Card, StatCard, Badge, SectionTitle } from "../components/ui.jsx";
 import { api } from "../api.js";
 
@@ -56,6 +59,7 @@ function ChartTip({ active, payload, label, unit }) {
 
 export default function Dashboard({ metrics, connected }) {
   const [vllm, setVllm] = useState(null);
+  const [dashTunnel, setDashTunnel] = useState(null);
 
   useEffect(() => {
     const tick = () => api.modelStatus().then(setVllm).catch(() => {});
@@ -63,6 +67,21 @@ export default function Dashboard({ metrics, connected }) {
     const id = setInterval(tick, 4000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    const tick = () =>
+      api
+        .tunnelList()
+        .then((r) =>
+          setDashTunnel((r.tunnels || []).find((t) => t.name === "dashboard") || null)
+        )
+        .catch(() => {});
+    tick();
+    const id = setInterval(tick, 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  const chatUrl = dashTunnel?.url ? `${dashTunnel.url.replace(/\/$/, "")}/chat` : "";
 
   const m = metrics || {};
   const cur = m.current || {};
@@ -76,9 +95,9 @@ export default function Dashboard({ metrics, connected }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-extrabold text-white">Centre de contrôle</h1>
+          <h1 className="text-xl font-extrabold text-white sm:text-2xl">Centre de contrôle</h1>
           <p className="text-sm text-slate-400">
             Démo RAG MCP · vLLM local sur NVIDIA GB10 (mémoire unifiée)
           </p>
@@ -98,10 +117,10 @@ export default function Dashboard({ metrics, connected }) {
               <span className="label text-brand">Débit du serveur local</span>
             </div>
             <div className="mt-1 flex items-baseline gap-2">
-              <span className="font-mono text-6xl font-extrabold text-white tabular-nums">
+              <span className="font-mono text-4xl font-extrabold text-white tabular-nums sm:text-6xl">
                 {fmt(m.tokens_per_second)}
               </span>
-              <span className="text-xl text-slate-300">tokens/s</span>
+              <span className="text-lg text-slate-300 sm:text-xl">tokens/s</span>
             </div>
             <p className="mt-1 text-sm text-slate-400">
               Total traité&nbsp;:{" "}
@@ -112,7 +131,7 @@ export default function Dashboard({ metrics, connected }) {
               {fmt(counters.total_tokens_out)} sortie
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-6 text-center">
+          <div className="grid w-full grid-cols-3 gap-4 text-center sm:w-auto sm:gap-6">
             <div>
               <div className="font-mono text-2xl font-bold text-white">
                 {fmt(counters.total_requests)}
@@ -247,6 +266,49 @@ export default function Dashboard({ metrics, connected }) {
           </div>
         </Card>
       </div>
+
+      {/* Mobile chat via tunnel QR code */}
+      <Card>
+        <SectionTitle
+          icon={Smartphone}
+          title="Chat mobile"
+          subtitle="Scannez pour ouvrir le chat sur votre téléphone via le tunnel"
+          right={
+            <Badge tone={chatUrl ? "green" : "slate"}>
+              {chatUrl ? "● Tunnel actif" : "Tunnel inactif"}
+            </Badge>
+          }
+        />
+        {chatUrl ? (
+          <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center">
+            <div className="rounded-2xl bg-white p-4">
+              <QRCodeSVG value={chatUrl} size={176} level="M" includeMargin={false} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-slate-300">
+                Scannez ce QR code avec l'appareil photo de votre téléphone pour
+                lancer le chat de test directement depuis le mobile, à travers le
+                tunnel public du dashboard.
+              </p>
+              <a
+                href={chatUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-flex max-w-full items-center gap-2 break-all font-mono text-xs text-brand hover:underline"
+              >
+                <QrCode size={14} className="shrink-0" />
+                {chatUrl}
+              </a>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">
+            Aucun tunnel «&nbsp;dashboard&nbsp;» actif. Créez et hébergez le tunnel
+            du dashboard depuis l'onglet «&nbsp;Tunnels&nbsp;» pour générer le QR
+            code d'accès mobile.
+          </p>
+        )}
+      </Card>
 
       {/* Active model details */}
       <Card>

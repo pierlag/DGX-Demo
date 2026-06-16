@@ -70,6 +70,12 @@ class Settings(BaseSettings):
     # Vite dev server port. The tunnel exposes this so hot-reload dev works.
     dashboard_port: int = 5173
 
+    # --- GitHub OAuth (issue reporting via Device Flow) ---
+    # Client ID of a GitHub OAuth App with "Device Flow" enabled. Required to
+    # request the ``repo`` scope. Override in .env via VIBEMCP_GITHUB_CLIENT_ID.
+    github_client_id: str = ""
+    github_oauth_scope: str = "repo"
+
     @property
     def vllm_base_url(self) -> str:
         return f"http://{self.vllm_host}:{self.vllm_port}/v1"

@@ -33,13 +33,30 @@ export const api = {
   tunnelDefaults: () => req("/api/tunnels/defaults"),
   tunnelLoginStatus: () => req("/api/tunnels/login-status"),
   tunnelLogin: () => req("/api/tunnels/login", { method: "POST" }),
+  tunnelLogout: () => req("/api/tunnels/logout", { method: "POST" }),
   tunnelList: () => req("/api/tunnels/list"),
   tunnelCreate: (name, port, protocol = "http") =>
     req("/api/tunnels/create", { method: "POST", headers: J, body: JSON.stringify({ name, port, protocol }) }),
+  tunnelCreateStream: (name, port, protocol = "http") =>
+    fetch("/api/tunnels/create-stream", {
+      method: "POST",
+      headers: J,
+      body: JSON.stringify({ name, port, protocol }),
+    }),
   tunnelStop: (name) =>
     req("/api/tunnels/stop", { method: "POST", headers: J, body: JSON.stringify({ name }) }),
   tunnelDelete: (name) =>
     req("/api/tunnels/delete", { method: "POST", headers: J, body: JSON.stringify({ name }) }),
+
+  // GitHub repo integration (issue reporting)
+  ghStatus: () => req("/api/tunnels/github/status"),
+  ghDevice: () => req("/api/tunnels/github/device", { method: "POST" }),
+  ghSetToken: (token) =>
+    req("/api/tunnels/github/token", { method: "POST", headers: J, body: JSON.stringify({ token }) }),
+  ghLogout: () => req("/api/tunnels/github/logout", { method: "POST" }),
+  ghRepos: () => req("/api/tunnels/github/repos"),
+  ghReport: (repo, name, url) =>
+    req("/api/tunnels/github/report", { method: "POST", headers: J, body: JSON.stringify({ repo, name, url }) }),
 
   // RAG
   ragFiles: () => req("/api/rag/files"),

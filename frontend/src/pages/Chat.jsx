@@ -44,7 +44,8 @@ export default function Chat() {
           const obj = JSON.parse(line);
           setMessages((m) => {
             const copy = [...m];
-            const last = copy[copy.length - 1];
+            const i = copy.length - 1;
+            const last = { ...copy[i] };
             if (obj.type === "sources") last.sources = obj.sources;
             else if (obj.type === "token") last.content += obj.text;
             else if (obj.type === "tool_calls") {
@@ -57,6 +58,7 @@ export default function Chat() {
                 tin: obj.tokens_in,
                 tout: obj.tokens_out,
               };
+            copy[i] = last;
             return copy;
           });
           scroll();
@@ -65,7 +67,10 @@ export default function Chat() {
     } catch (e) {
       setMessages((m) => {
         const copy = [...m];
-        copy[copy.length - 1].content += `\n⚠️ Erreur: ${e.message}`;
+        const i = copy.length - 1;
+        const last = { ...copy[i] };
+        last.content += `\n⚠️ Erreur: ${e.message}`;
+        copy[i] = last;
         return copy;
       });
     } finally {
@@ -75,7 +80,7 @@ export default function Chat() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-3rem)] flex-col space-y-4">
+    <div className="flex h-[calc(100dvh-7rem)] flex-col space-y-3 sm:space-y-4 lg:h-[calc(100vh-3rem)]">
       <SectionTitle
         icon={MessagesSquare}
         title="Chat de test · Serveur MCP RAG"
@@ -112,7 +117,7 @@ export default function Chat() {
                   <Bot size={16} />
                 </div>
               )}
-              <div className={`max-w-[75%] ${msg.role === "user" ? "order-1" : ""}`}>
+              <div className={`max-w-[85%] sm:max-w-[75%] ${msg.role === "user" ? "order-1" : ""}`}>
                 <div
                   className={`whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm ${
                     msg.role === "user"
@@ -160,8 +165,8 @@ export default function Chat() {
           ))}
         </div>
 
-        <div className="border-t border-ink-border p-4">
-          <div className="flex gap-2">
+        <div className="border-t border-ink-border p-3 sm:p-4">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <input
               className="input"
               placeholder="Votre question…"
@@ -170,7 +175,11 @@ export default function Chat() {
               onKeyDown={(e) => e.key === "Enter" && send()}
               disabled={busy}
             />
-            <button className="btn-primary" onClick={send} disabled={busy || !input.trim()}>
+            <button
+              className="btn-primary shrink-0 justify-center"
+              onClick={send}
+              disabled={busy || !input.trim()}
+            >
               <Send size={16} /> Envoyer
             </button>
           </div>
