@@ -107,7 +107,14 @@ export const api = {
     }),
   studioJob: (job_id) => req(`/api/studio3d/job?job_id=${encodeURIComponent(job_id)}`),
   studioJobs: () => req("/api/studio3d/jobs"),
+  studioQueue: () => req("/api/studio3d/queue"),
   studioHistory: () => req("/api/studio3d/history"),
+  studioSetPreview: (name, image) =>
+    req("/api/studio3d/preview", {
+      method: "POST",
+      headers: J,
+      body: JSON.stringify({ name, image }),
+    }),
   studioDelete: (name) =>
     req(`/api/studio3d/file/${encodeURIComponent(name)}`, { method: "DELETE" }),
 

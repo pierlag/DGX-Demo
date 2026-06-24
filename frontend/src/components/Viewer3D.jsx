@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { Scene } from "@babylonjs/core/scene";
 import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
@@ -13,10 +13,37 @@ import "@babylonjs/loaders/glTF";
  * BabylonJS viewer that loads a GLB model and lets the user orbit it with the
  * mouse (left-drag rotate, wheel zoom, right-drag pan).
  */
-export default function Viewer3D({ src }) {
+export default forwardRef(function Viewer3D({ src }, ref) {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const sceneRef = useRef(null);
+
+  useImperativeHandle(ref, () => ({
+    /** Render a fresh frame and return its centered square as a PNG data URL. */
+    capture: () => {
+      const engine = engineRef.current;
+      const scene = sceneRef.current;
+      const canvas = canvasRef.current;
+      if (!engine || !scene || !canvas) return null;
+      try {
+        scene.render();
+        const w = canvas.width;
+        const h = canvas.height;
+        const side = Math.min(w, h);
+        const sx = (w - side) / 2;
+        const sy = (h - side) / 2;
+        const off = document.createElement("canvas");
+        off.width = side;
+        off.height = side;
+        const ctx = off.getContext("2d");
+        // Crop the centered square of the viewport (not the top of the frame).
+        ctx.drawImage(canvas, sx, sy, side, side, 0, 0, side, side);
+        return off.toDataURL("image/png");
+      } catch {
+        return null;
+      }
+    },
+  }));
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -98,4 +125,4 @@ export default function Viewer3D({ src }) {
       style={{ touchAction: "none" }}
     />
   );
-}
+});

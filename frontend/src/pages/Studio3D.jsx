@@ -23,6 +23,7 @@ import {
   Settings2,
   Dices,
   ChevronDown,
+  Camera,
 } from "lucide-react";
 import { Card, SectionTitle, Badge, Field, Spinner } from "../components/ui.jsx";
 import Viewer3D from "../components/Viewer3D.jsx";
@@ -258,13 +259,19 @@ export default function Studio3D() {
   const [imageName, setImageName] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [glbUrl, setGlbUrl] = useState("");
+  const [glbName, setGlbName] = useState("");
   const [imgBusy, setImgBusy] = useState(false);
   const [meshBusy, setMeshBusy] = useState(false);
   const [meshProgress, setMeshProgress] = useState(null);
+  const [meshQueue, setMeshQueue] = useState([]);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [previewMsg, setPreviewMsg] = useState("");
   const [error, setError] = useState("");
   const [history, setHistory] = useState([]);
   const fileRef = useRef(null);
   const pollers = useRef([]);
+  const meshTrack = useRef({ runningId: null });
+  const viewerRef = useRef(null);
 
   // Generation parameters
   const [imgParams, setImgParams] = useState({
@@ -323,6 +330,7 @@ export default function Studio3D() {
   const attachImageJob = (jobId) => {
     setImgBusy(true);
     setGlbUrl("");
+    setGlbName("");
     pollJob(jobId, (done) => {
       setImageName(done.result_name);
       setImageUrl(done.result_url + `?t=${Date.now()}`);
@@ -331,38 +339,62 @@ export default function Studio3D() {
     });
   };
 
-  const attachMeshJob = (jobId) => {
-    setMeshBusy(true);
-    pollJob(jobId, (done) => {
-      setGlbUrl(done.result_url + `?t=${Date.now()}`);
-      setMeshBusy(false);
-      setMeshProgress(null);
-      refreshHistory();
-    });
+  // Poll the 3D generation queue: drives the progress bar of the running job,
+  // the list of pending jobs, and loads the result when a job completes.
+  const pollQueue = async () => {
+    try {
+      const { jobs } = await api.studioQueue();
+      const items = jobs || [];
+      setMeshQueue(items);
+      setMeshBusy(items.length > 0);
+      const running = items.find((j) => j.queue_position === 0) || null;
+      setMeshProgress(running);
+
+      const prevId = meshTrack.current.runningId;
+      const curId = running?.id || null;
+      // The previously running job left the queue -> fetch its final result.
+      if (prevId && prevId !== curId) {
+        try {
+          const { job } = await api.studioJob(prevId);
+          if (job?.status === "done") {
+            setGlbUrl(job.result_url + `?t=${Date.now()}`);
+            setGlbName(job.result_name || "");
+            setPreviewMsg("");
+            refreshHistory();
+          } else if (job?.status === "error") {
+            setError(job.message || "Échec de la génération 3D.");
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      meshTrack.current.runningId = curId;
+    } catch {
+      /* keep polling */
+    }
   };
 
   useEffect(() => {
     refreshStatus();
     refreshHistory();
-    // Resume any job still running on the backend (e.g. after navigating away).
+    pollQueue();
+    // Resume any image job still running on the backend (after navigating away).
     api
       .studioJobs()
       .then(({ jobs }) => {
-        const running = (jobs || []).filter(
-          (j) => j.status === "running" || j.status === "pending"
+        const img = (jobs || []).find(
+          (j) =>
+            j.kind === "image" &&
+            (j.status === "running" || j.status === "pending")
         );
-        const mesh = running.find((j) => j.kind === "mesh");
-        const img = running.find((j) => j.kind === "image");
-        if (mesh) {
-          setMeshProgress(mesh);
-          attachMeshJob(mesh.id);
-        }
         if (img) attachImageJob(img.id);
       })
       .catch(() => {});
     const id = setInterval(refreshStatus, 4000);
+    const qid = setInterval(pollQueue, 1500);
     return () => {
       clearInterval(id);
+      clearInterval(qid);
       pollers.current.forEach(clearInterval);
       pollers.current = [];
     };
@@ -373,6 +405,7 @@ export default function Studio3D() {
     if (!prompt.trim() || imgBusy) return;
     setError("");
     setGlbUrl("");
+    setGlbName("");
     try {
       const { ok, job, message } = await api.studioTextToImage(prompt.trim(), {
         seed: imgParams.seed === "" ? null : Number(imgParams.seed),
@@ -395,6 +428,7 @@ export default function Studio3D() {
     if (!f) return;
     setError("");
     setGlbUrl("");
+    setGlbName("");
     const fd = new FormData();
     fd.append("file", f);
     try {
@@ -411,10 +445,8 @@ export default function Studio3D() {
   };
 
   const genMesh = async () => {
-    if (!imageName || meshBusy) return;
+    if (!imageName) return;
     setError("");
-    setMeshProgress(null);
-    setGlbUrl("");
     try {
       const { ok, job, message } = await api.studioGenerate(imageName, {
         seed: Number(meshParams.seed),
@@ -427,11 +459,10 @@ export default function Studio3D() {
         texture_size: Number(meshParams.texture_size),
       });
       if (!ok) throw new Error(message || "Refusé.");
-      attachMeshJob(job.id);
+      setMeshBusy(true);
+      pollQueue();
     } catch (e) {
       setError(e.message);
-      setMeshBusy(false);
-      setMeshProgress(null);
     }
   };
 
@@ -440,10 +471,34 @@ export default function Studio3D() {
     const url = item.url + `?t=${Date.now()}`;
     if (item.kind === "mesh") {
       setGlbUrl(url);
+      setGlbName(item.name);
+      setPreviewMsg("");
     } else {
       setImageName(item.name);
       setImageUrl(url);
       setGlbUrl("");
+      setGlbName("");
+    }
+  };
+
+  const capturePreview = async () => {
+    if (!glbName || !viewerRef.current) return;
+    const dataUrl = viewerRef.current.capture();
+    if (!dataUrl) {
+      setError("Impossible de capturer la vue 3D.");
+      return;
+    }
+    setPreviewBusy(true);
+    setPreviewMsg("");
+    try {
+      const { ok, message } = await api.studioSetPreview(glbName, dataUrl);
+      if (!ok) throw new Error(message || "Échec de la capture.");
+      setPreviewMsg("Preview enregistrée pour l'historique.");
+      refreshHistory();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setPreviewBusy(false);
     }
   };
 
@@ -453,7 +508,10 @@ export default function Studio3D() {
     } catch {
       /* ignore */
     }
-    if (item.kind === "mesh" && glbUrl.includes(item.name)) setGlbUrl("");
+    if (item.kind === "mesh" && glbUrl.includes(item.name)) {
+      setGlbUrl("");
+      setGlbName("");
+    }
     if (item.kind === "image") {
       if (imageUrl.includes(item.name)) setImageUrl("");
       if (imageName === item.name) setImageName("");
@@ -725,9 +783,10 @@ export default function Studio3D() {
           <button
             className="btn-primary w-full justify-center"
             onClick={genMesh}
-            disabled={!imageName || meshBusy}
+            disabled={!imageName}
           >
-            {meshBusy ? <Spinner size={16} /> : <Boxes size={16} />} Générer le modèle 3D
+            {meshBusy ? <Spinner size={16} /> : <Boxes size={16} />}{" "}
+            {meshBusy ? "Ajouter à la file" : "Générer le modèle 3D"}
           </button>
 
           {meshProgress && (
@@ -741,6 +800,33 @@ export default function Studio3D() {
               <p className="mt-1 text-xs text-slate-400">
                 {meshProgress.message} · {Math.round(meshProgress.progress || 0)}%
               </p>
+            </div>
+          )}
+
+          {meshQueue.filter((j) => j.queue_position >= 1).length > 0 && (
+            <div className="space-y-1.5">
+              <p className="label flex items-center gap-1.5">
+                <Clock size={13} /> File d'attente ·{" "}
+                {meshQueue.filter((j) => j.queue_position >= 1).length} en attente
+              </p>
+              {meshQueue
+                .filter((j) => j.queue_position >= 1)
+                .map((j) => (
+                  <div
+                    key={j.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-ink-border bg-ink-900/40 px-3 py-2 text-xs"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand/20 font-mono text-brand">
+                        {j.queue_position}
+                      </span>
+                      <span className="truncate text-slate-300">
+                        {j.image_name || j.id}
+                      </span>
+                    </span>
+                    <Badge tone="slate">En attente</Badge>
+                  </div>
+                ))}
             </div>
           )}
         </Card>
@@ -761,7 +847,7 @@ export default function Studio3D() {
           <div className="relative min-h-[320px] flex-1 overflow-hidden rounded-xl border border-ink-border bg-ink-900/40 lg:min-h-[420px]">
             {glbUrl ? (
               <>
-                <Viewer3D src={glbUrl} />
+                <Viewer3D ref={viewerRef} src={glbUrl} />
                 <div className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1.5 rounded-lg bg-black/50 px-2.5 py-1 text-[11px] text-slate-300">
                   <MousePointer2 size={12} /> Glissez pour tourner · molette pour zoomer
                 </div>
@@ -784,6 +870,24 @@ export default function Studio3D() {
               </div>
             )}
           </div>
+
+          {glbUrl && (
+            <div className="mt-3 space-y-1.5">
+              <button
+                className="btn-secondary w-full justify-center"
+                onClick={capturePreview}
+                disabled={previewBusy || !glbName}
+              >
+                {previewBusy ? <Spinner size={14} /> : <Camera size={14} />}
+                Capturer la preview pour l'historique
+              </button>
+              {previewMsg && (
+                <p className="flex items-center gap-1 text-xs text-brand">
+                  <CheckCircle2 size={12} /> {previewMsg}
+                </p>
+              )}
+            </div>
+          )}
         </Card>
       </div>
 
@@ -819,6 +923,13 @@ export default function Studio3D() {
                       src={item.url}
                       alt={item.name}
                       className="h-full w-full object-contain"
+                      loading="lazy"
+                    />
+                  ) : item.preview_url ? (
+                    <img
+                      src={item.preview_url}
+                      alt={item.name}
+                      className="h-full w-full object-cover"
                       loading="lazy"
                     />
                   ) : (

@@ -63,6 +63,11 @@ class RuntimeRequest(BaseModel):
     runtime: str
 
 
+class PreviewRequest(BaseModel):
+    name: str
+    image: str  # data URL: "data:image/png;base64,..."
+
+
 @router.get("/status")
 def status():
     return studio_manager.status()
@@ -149,9 +154,21 @@ def jobs():
     return {"jobs": studio_manager.list_jobs()}
 
 
+@router.get("/queue")
+def queue():
+    return {"jobs": studio_manager.queue()}
+
+
 @router.get("/history")
 def history():
     return {"items": studio_manager.history()}
+
+
+@router.post("/preview")
+def set_preview(req: PreviewRequest):
+    if not _SAFE_NAME.match(req.name):
+        return {"ok": False, "message": "Nom invalide."}
+    return studio_manager.set_preview(req.name, req.image)
 
 
 @router.delete("/file/{name}")

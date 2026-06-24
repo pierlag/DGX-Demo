@@ -12,6 +12,7 @@ actionable status instead of crashing the server.
 """
 from __future__ import annotations
 
+import base64
 import importlib.util
 import json
 import os
@@ -52,12 +53,15 @@ def _local_or_remote(model_id: str) -> str:
 class StudioJob:
     id: str
     kind: str  # "image" | "mesh"
-    status: str = "pending"  # pending | running | done | error
+    status: str = "pending"  # pending | queued | running | done | error
     message: str = ""
     progress: float = 0.0  # 0-100
     result_name: str = ""  # filename inside studio_assets_dir
     prompt: str = ""
     created: float = field(default_factory=time.time)
+    image_name: str = ""  # source image (mesh jobs)
+    params: dict[str, Any] = field(default_factory=dict)
+    queue_position: int = 0  # 0 = running/not queued, >=1 = waiting in line
 
     def to_dict(self) -> dict[str, Any]:
         url = f"/api/studio3d/file/{self.result_name}" if self.result_name else ""
@@ -70,6 +74,8 @@ class StudioJob:
             "result_name": self.result_name,
             "result_url": url,
             "prompt": self.prompt,
+            "image_name": self.image_name,
+            "queue_position": self.queue_position,
         }
 
 
@@ -370,6 +376,16 @@ class StudioManager:
         self._history: list[dict[str, Any]] = []
         self._load_history()
 
+        # 3D (mesh) generation queue: jobs are processed one at a time by a
+        # single background worker so heavy TRELLIS runs never overlap.
+        self._mesh_pending: list[str] = []      # queued job ids, in order
+        self._mesh_current: str | None = None   # job id currently running
+        self._mesh_cv = threading.Condition()
+        self._mesh_worker = threading.Thread(
+            target=self._run_mesh_worker, daemon=True
+        )
+        self._mesh_worker.start()
+
     # -- history ----------------------------------------------------------
     def _history_path(self) -> Path:
         return settings.studio_assets_dir / "_history.json"
@@ -416,8 +432,46 @@ class StudioManager:
             name = h.get("name", "")
             if not name or not (settings.studio_assets_dir / name).exists():
                 continue
-            items.append({**h, "url": f"/api/studio3d/file/{name}"})
+            entry = {**h, "url": f"/api/studio3d/file/{name}"}
+            preview = h.get("preview")
+            ppath = settings.studio_assets_dir / preview if preview else None
+            if ppath is not None and ppath.exists():
+                # Cache-bust on mtime so a re-capture replaces the old thumbnail.
+                entry["preview_url"] = (
+                    f"/api/studio3d/file/{preview}?v={int(ppath.stat().st_mtime)}"
+                )
+            items.append(entry)
         return items
+
+    def set_preview(self, name: str, data_url: str) -> dict[str, Any]:
+        """Save a captured PNG as the preview image for a generated asset."""
+        path = (settings.studio_assets_dir / name).resolve()
+        base = settings.studio_assets_dir.resolve()
+        if base not in path.parents or not path.exists():
+            return {"ok": False, "message": "Modèle introuvable."}
+        try:
+            b64 = data_url.split(",", 1)[1] if "," in data_url else data_url
+            raw = base64.b64decode(b64)
+        except Exception:
+            return {"ok": False, "message": "Image invalide."}
+        if not raw:
+            return {"ok": False, "message": "Image vide."}
+        preview_name = f"{name}.preview.png"
+        try:
+            (settings.studio_assets_dir / preview_name).write_bytes(raw)
+        except Exception as exc:
+            return {"ok": False, "message": str(exc)}
+        with self._lock:
+            for h in self._history:
+                if h.get("name") == name:
+                    h["preview"] = preview_name
+                    break
+            self._save_history()
+        return {
+            "ok": True,
+            "preview": preview_name,
+            "preview_url": f"/api/studio3d/file/{preview_name}",
+        }
 
     def delete_asset(self, name: str) -> dict[str, Any]:
         """Delete an asset file and remove it from the history."""
@@ -431,8 +485,17 @@ class StudioManager:
         except Exception as exc:
             return {"ok": False, "message": str(exc)}
         with self._lock:
+            preview = next(
+                (h.get("preview") for h in self._history if h.get("name") == name),
+                None,
+            )
             self._history = [h for h in self._history if h.get("name") != name]
             self._save_history()
+        if preview:
+            try:
+                (settings.studio_assets_dir / preview).unlink(missing_ok=True)
+            except Exception:
+                pass
         return {"ok": True}
 
     # -- status -----------------------------------------------------------
@@ -532,34 +595,86 @@ class StudioManager:
         return job
 
     def submit_mesh(self, image_name: str, params: dict[str, Any] | None = None) -> StudioJob:
+        """Enqueue a 3D (mesh) generation. Jobs run one at a time (FIFO)."""
         job = self._new_job("mesh")
+        job.image_name = image_name
+        job.params = params or {}
+        job.status = "queued"
+        job.message = "En file d'attente…"
+        with self._mesh_cv:
+            self._mesh_pending.append(job.id)
+            self._refresh_positions_locked()
+            self._mesh_cv.notify()
+        return job
+
+    # -- mesh queue -------------------------------------------------------
+    def _refresh_positions_locked(self) -> None:
+        """Recompute queue_position for pending mesh jobs (hold _mesh_cv)."""
+        for idx, jid in enumerate(self._mesh_pending):
+            job = self._jobs.get(jid)
+            if job is not None:
+                job.queue_position = idx + 1
+
+    def _run_mesh_worker(self) -> None:
+        """Background worker: process queued mesh jobs sequentially."""
+        while True:
+            with self._mesh_cv:
+                while not self._mesh_pending:
+                    self._mesh_cv.wait()
+                job_id = self._mesh_pending.pop(0)
+                self._mesh_current = job_id
+                self._refresh_positions_locked()
+            try:
+                self._process_mesh(job_id)
+            finally:
+                with self._mesh_cv:
+                    self._mesh_current = None
+
+    def _process_mesh(self, job_id: str) -> None:
+        job = self._jobs.get(job_id)
+        if job is None:
+            return
 
         def _progress(p: float, msg: str) -> None:
             job.progress = p
             job.message = msg
 
-        def _run() -> None:
-            job.status = "running"
-            job.progress = 5.0
-            job.message = "Initialisation de TRELLIS.2…"
-            started = time.time()
-            try:
-                name = self.trellis.generate(image_name, progress=_progress, params=params)
-                job.result_name = name
-                job.progress = 100.0
-                job.status = "done"
-                job.message = "Modèle 3D généré."
-                self._add_history(name, "mesh", source=image_name)
-                metrics_store.record_studio(
-                    "mesh", time.time() - started,
-                    label=image_name, model=self.trellis.model_id,
-                )
-            except Exception as exc:
-                job.status = "error"
-                job.message = str(exc)
+        job.status = "running"
+        job.queue_position = 0
+        job.progress = 5.0
+        job.message = "Initialisation de TRELLIS.2…"
+        started = time.time()
+        try:
+            name = self.trellis.generate(job.image_name, progress=_progress,
+                                         params=job.params)
+            job.result_name = name
+            job.progress = 100.0
+            job.status = "done"
+            job.message = "Modèle 3D généré."
+            self._add_history(name, "mesh", source=job.image_name)
+            metrics_store.record_studio(
+                "mesh", time.time() - started,
+                label=job.image_name, model=self.trellis.model_id,
+            )
+        except Exception as exc:
+            job.status = "error"
+            job.message = str(exc)
 
-        threading.Thread(target=_run, daemon=True).start()
-        return job
+    def queue(self) -> list[dict[str, Any]]:
+        """Return the running 3D job (position 0) plus pending jobs in order."""
+        with self._mesh_cv:
+            current = self._mesh_current
+            pending = list(self._mesh_pending)
+        out: list[dict[str, Any]] = []
+        if current:
+            job = self._jobs.get(current)
+            if job is not None:
+                out.append(job.to_dict())
+        for jid in pending:
+            job = self._jobs.get(jid)
+            if job is not None:
+                out.append(job.to_dict())
+        return out
 
 
 studio_manager = StudioManager()
