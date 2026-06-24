@@ -16,6 +16,9 @@ export const api = {
   downloadModel: (model_id, hf_token) =>
     req("/api/models/download", { method: "POST", headers: J, body: JSON.stringify({ model_id, hf_token }) }),
   downloadStatus: (model_id) => req(`/api/models/download/status?model_id=${encodeURIComponent(model_id)}`),
+  allDownloads: () => req("/api/models/downloads"),
+  deleteDownloadedModel: (model_id) =>
+    req(`/api/models/downloaded?model_id=${encodeURIComponent(model_id)}`, { method: "DELETE" }),
   launchModel: (params) =>
     req("/api/models/launch", { method: "POST", headers: J, body: JSON.stringify(params) }),
   stopModel: () => req("/api/models/stop", { method: "POST" }),
@@ -74,6 +77,39 @@ export const api = {
     req(`/api/docker/containers/${container_id}/stop`, { method: "POST" }),
   getDockerContainerConfig: (container_id) =>
     req(`/api/docker/containers/${container_id}/config`),
+
+  // Studio 3D (TRELLIS.2 image->3D + text->image)
+  studioStatus: () => req("/api/studio3d/status"),
+  studioLoadImageGen: () => req("/api/studio3d/image-gen/load", { method: "POST" }),
+  studioLoadTrellis: () => req("/api/studio3d/trellis/load", { method: "POST" }),
+  studioSetTrellisRuntime: (runtime) =>
+    req("/api/studio3d/trellis/runtime", {
+      method: "POST",
+      headers: J,
+      body: JSON.stringify({ runtime }),
+    }),
+  studioTrellisBuild: () => req("/api/studio3d/trellis/container/build", { method: "POST" }),
+  studioTrellisStart: () => req("/api/studio3d/trellis/container/start", { method: "POST" }),
+  studioTrellisStop: () => req("/api/studio3d/trellis/container/stop", { method: "POST" }),
+  studioTextToImage: (prompt, params = {}) =>
+    req("/api/studio3d/text-to-image", {
+      method: "POST",
+      headers: J,
+      body: JSON.stringify({ prompt, ...params }),
+    }),
+  studioUpload: (formData) =>
+    req("/api/studio3d/upload", { method: "POST", body: formData }),
+  studioGenerate: (image_name, params = {}) =>
+    req("/api/studio3d/generate", {
+      method: "POST",
+      headers: J,
+      body: JSON.stringify({ image_name, ...params }),
+    }),
+  studioJob: (job_id) => req(`/api/studio3d/job?job_id=${encodeURIComponent(job_id)}`),
+  studioJobs: () => req("/api/studio3d/jobs"),
+  studioHistory: () => req("/api/studio3d/history"),
+  studioDelete: (name) =>
+    req(`/api/studio3d/file/${encodeURIComponent(name)}`, { method: "DELETE" }),
 
   // Metrics
   snapshot: () => req("/api/metrics/snapshot"),

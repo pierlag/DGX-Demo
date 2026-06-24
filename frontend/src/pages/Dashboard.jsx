@@ -19,6 +19,11 @@ import {
   Thermometer,
   Smartphone,
   QrCode,
+  Leaf,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Boxes,
+  Image as ImageIcon,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Card, StatCard, Badge, SectionTitle } from "../components/ui.jsx";
@@ -29,6 +34,20 @@ function fmt(n) {
   if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
   if (n >= 1e3) return (n / 1e3).toFixed(1) + "k";
   return String(Math.round(n));
+}
+
+// Energy in Wh -> compact "Wh" / "mWh" string.
+function fmtEnergy(wh) {
+  if (wh == null) return "0";
+  if (wh >= 1) return `${wh.toFixed(2)} Wh`;
+  return `${(wh * 1000).toFixed(1)} mWh`;
+}
+
+// CO2 in grams -> compact "g" / "mg" string.
+function fmtCo2(g) {
+  if (g == null) return "0";
+  if (g >= 1) return `${g.toFixed(2)} g`;
+  return `${(g * 1000).toFixed(1)} mg`;
 }
 
 function toSeries(history = []) {
@@ -60,11 +79,19 @@ function ChartTip({ active, payload, label, unit }) {
 export default function Dashboard({ metrics, connected }) {
   const [vllm, setVllm] = useState(null);
   const [dashTunnel, setDashTunnel] = useState(null);
+  const [studio, setStudio] = useState(null);
 
   useEffect(() => {
     const tick = () => api.modelStatus().then(setVllm).catch(() => {});
     tick();
     const id = setInterval(tick, 4000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const tick = () => api.studioStatus().then(setStudio).catch(() => {});
+    tick();
+    const id = setInterval(tick, 5000);
     return () => clearInterval(id);
   }, []);
 
@@ -91,7 +118,15 @@ export default function Dashboard({ metrics, connected }) {
   const memPct = cur.mem_total_mb
     ? Math.round((cur.mem_used_mb / cur.mem_total_mb) * 100)
     : 0;
-  const loadedModels = vllm?.running ? 1 : 0;
+  const studioImageLoaded = !!studio?.image_gen?.loaded;
+  const studioTrellisLoaded = !!studio?.trellis?.loaded;
+  const studioLoaded = (studioImageLoaded ? 1 : 0) + (studioTrellisLoaded ? 1 : 0);
+  const loadedModels = (vllm?.running ? 1 : 0) + studioLoaded;
+  const recent = m.recent_requests || [];
+  const carbonIntensity = m.carbon_intensity_g_per_kwh;
+  const studioMetrics = m.studio || {};
+  const studioTotals = studioMetrics.totals || {};
+  const studioRecent = studioMetrics.recent || [];
 
   return (
     <div className="space-y-6">
@@ -156,6 +191,164 @@ export default function Dashboard({ metrics, connected }) {
         </div>
       </Card>
 
+      {/* Dernières requêtes : tokens, énergie & CO2 (mix France) */}
+      <Card>
+        <SectionTitle
+          icon={Leaf}
+          title="3 dernières requêtes"
+          subtitle="Tokens, énergie consommée et émissions CO₂"
+          right={
+            carbonIntensity != null ? (
+              <span className="flex items-center gap-1 font-mono text-xs text-emerald-400">
+                <Leaf size={14} /> {carbonIntensity} gCO₂/kWh · France
+              </span>
+            ) : null
+          }
+        />
+        {recent.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="label border-b border-ink-border text-left">
+                  <th className="py-2 pr-4 font-medium">Heure</th>
+                  <th className="py-2 pr-4 text-right font-medium">
+                    <span className="inline-flex items-center gap-1">
+                      <ArrowDownToLine size={13} /> Entrée
+                    </span>
+                  </th>
+                  <th className="py-2 pr-4 text-right font-medium">
+                    <span className="inline-flex items-center gap-1">
+                      <ArrowUpFromLine size={13} /> Sortie
+                    </span>
+                  </th>
+                  <th className="py-2 pr-4 text-right font-medium">Énergie</th>
+                  <th className="py-2 text-right font-medium">CO₂</th>
+                </tr>
+              </thead>
+              <tbody className="font-mono text-white">
+                {recent.map((r, i) => (
+                  <tr key={i} className="border-b border-ink-border/50 last:border-0">
+                    <td className="py-2 pr-4 text-slate-300">
+                      {new Date(r.ts * 1000).toLocaleTimeString("fr-FR")}
+                    </td>
+                    <td className="py-2 pr-4 text-right">{fmt(r.tokens_in)}</td>
+                    <td className="py-2 pr-4 text-right">{fmt(r.tokens_out)}</td>
+                    <td className="py-2 pr-4 text-right text-amber-400">
+                      {fmtEnergy(r.energy_wh)}
+                    </td>
+                    <td className="py-2 text-right text-emerald-400">
+                      {fmtCo2(r.co2_g)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">
+            Aucune requête traitée pour le moment. Lancez une conversation pour
+            voir apparaître la consommation énergétique et les émissions CO₂.
+          </p>
+        )}
+      </Card>
+
+      {/* Studio 3D : appels, modèles chargés, énergie & CO2 */}
+      <Card>
+        <SectionTitle
+          icon={Boxes}
+          title="Studio 3D"
+          subtitle="Appels texte→image & image→3D · énergie et CO₂"
+          right={
+            <span className="font-mono text-2xl font-bold text-brand">
+              {fmt(studioTotals.requests)}
+              <span className="ml-1 text-sm text-slate-400">appels</span>
+            </span>
+          }
+        />
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <Detail
+            label="Texte → image"
+            value={
+              <Badge tone={studioImageLoaded ? "green" : "slate"}>
+                {studioImageLoaded ? "Chargé" : "Inactif"}
+              </Badge>
+            }
+            tone={undefined}
+          />
+          <Detail
+            label="Image → 3D (TRELLIS)"
+            value={
+              <Badge tone={studioTrellisLoaded ? "green" : "slate"}>
+                {studioTrellisLoaded ? "Chargé" : "Inactif"}
+              </Badge>
+            }
+            tone={undefined}
+          />
+          <Detail
+            label="Énergie cumulée"
+            value={<span className="text-amber-400">{fmtEnergy(studioTotals.energy_wh)}</span>}
+          />
+          <Detail
+            label="CO₂ cumulé"
+            value={<span className="text-emerald-400">{fmtCo2(studioTotals.co2_g)}</span>}
+          />
+        </div>
+
+        <div className="mt-4">
+          {studioRecent.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="label border-b border-ink-border text-left">
+                    <th className="py-2 pr-4 font-medium">Heure</th>
+                    <th className="py-2 pr-4 font-medium">Type</th>
+                    <th className="py-2 pr-4 font-medium">Détail</th>
+                    <th className="py-2 pr-4 text-right font-medium">Durée</th>
+                    <th className="py-2 pr-4 text-right font-medium">Énergie</th>
+                    <th className="py-2 text-right font-medium">CO₂</th>
+                  </tr>
+                </thead>
+                <tbody className="text-white">
+                  {studioRecent.map((r, i) => (
+                    <tr key={i} className="border-b border-ink-border/50 last:border-0">
+                      <td className="py-2 pr-4 font-mono text-slate-300">
+                        {new Date(r.ts * 1000).toLocaleTimeString("fr-FR")}
+                      </td>
+                      <td className="py-2 pr-4">
+                        <span className="inline-flex items-center gap-1 text-slate-200">
+                          {r.kind === "mesh" ? (
+                            <Boxes size={13} className="text-brand" />
+                          ) : (
+                            <ImageIcon size={13} className="text-violet-400" />
+                          )}
+                          {r.kind === "mesh" ? "3D" : "Image"}
+                        </span>
+                      </td>
+                      <td className="max-w-[16rem] truncate py-2 pr-4 text-slate-400" title={r.label}>
+                        {r.label || "—"}
+                      </td>
+                      <td className="py-2 pr-4 text-right font-mono">{Math.round(r.duration_s)}s</td>
+                      <td className="py-2 pr-4 text-right font-mono text-amber-400">
+                        {fmtEnergy(r.energy_wh)}
+                      </td>
+                      <td className="py-2 text-right font-mono text-emerald-400">
+                        {fmtCo2(r.co2_g)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">
+              Aucune génération Studio 3D pour le moment. Lancez une génération
+              depuis l'onglet «&nbsp;Studio 3D&nbsp;» pour suivre l'énergie et les
+              émissions CO₂.
+            </p>
+          )}
+        </div>
+      </Card>
+
       {/* Stat grid */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
@@ -163,7 +356,7 @@ export default function Dashboard({ metrics, connected }) {
           label="Modèles chargés"
           value={loadedModels}
           accent="brand"
-          hint={vllm?.model || "Aucun modèle actif"}
+          hint={vllm?.model || (studioLoaded ? "Studio 3D actif" : "Aucun modèle actif")}
         />
         <StatCard
           icon={HardDrive}

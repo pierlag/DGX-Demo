@@ -66,6 +66,11 @@ def downloads():
     return {"jobs": [j.__dict__ for j in download_manager.all_jobs()]}
 
 
+@router.delete("/downloaded")
+def delete_downloaded(model_id: str):
+    return download_manager.delete_model(model_id)
+
+
 @router.post("/launch")
 async def launch(req: LaunchRequest):
     params = LaunchParams(**req.model_dump())

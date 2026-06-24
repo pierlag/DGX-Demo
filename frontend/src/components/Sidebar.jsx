@@ -9,6 +9,7 @@ import {
   Activity,
   Container,
   Globe,
+  Boxes,
 } from "lucide-react";
 
 const links = [
@@ -19,6 +20,7 @@ const links = [
   { to: "/docker", label: "Gestion Docker", icon: Container },
   { to: "/rag", label: "RAG / Documents", icon: Database },
   { to: "/chat", label: "Chat de test", icon: MessagesSquare },
+  { to: "/studio3d", label: "Studio 3D", icon: Boxes },
 ];
 
 export default function Sidebar({
@@ -32,7 +34,7 @@ export default function Sidebar({
   const clickTimerRef = useRef(null);
 
   const visibleLinks = kioskMode
-    ? links.filter((l) => l.to === "/" || l.to === "/chat")
+    ? links.filter((l) => l.to === "/" || l.to === "/chat" || l.to === "/studio3d")
     : links;
 
   const onLogoClick = () => {

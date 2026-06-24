@@ -16,7 +16,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import chat, docker_admin, mcp_admin, models, monitoring, rag, tunnels
+from app.api import (
+    chat, docker_admin, mcp_admin, models, monitoring, rag, studio3d, tunnels,
+)
 from app.config import settings
 from app.services.gpu_monitor import gpu_monitor
 from app.services.rag_pipeline import rag_pipeline
@@ -47,6 +49,7 @@ app.include_router(models.router)
 app.include_router(mcp_admin.router)
 app.include_router(tunnels.router)
 app.include_router(docker_admin.router)
+app.include_router(studio3d.router)
 app.include_router(rag.router)
 app.include_router(chat.router)
 app.include_router(monitoring.router)

@@ -10,6 +10,7 @@ import TunnelsAdmin from "./pages/TunnelsAdmin.jsx";
 import DockerAdmin from "./pages/DockerAdmin.jsx";
 import RagAdmin from "./pages/RagAdmin.jsx";
 import Chat from "./pages/Chat.jsx";
+import Studio3D from "./pages/Studio3D.jsx";
 
 export default function App() {
   const { data, connected } = useMetrics();
@@ -64,6 +65,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Dashboard metrics={data} connected={connected} />} />
               <Route path="/chat" element={<Chat />} />
+              <Route path="/studio3d" element={<Studio3D />} />
               {!kioskMode && <Route path="/models" element={<ModelsAdmin />} />}
               {!kioskMode && <Route path="/mcp" element={<McpAdmin />} />}
               {!kioskMode && <Route path="/tunnels" element={<TunnelsAdmin />} />}

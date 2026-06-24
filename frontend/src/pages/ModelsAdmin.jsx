@@ -8,6 +8,8 @@ import {
   Sparkles,
   CheckCircle2,
   Loader2,
+  RotateCw,
+  Trash2,
 } from "lucide-react";
 import { Card, SectionTitle, Badge, Field, Spinner } from "../components/ui.jsx";
 import { api } from "../api.js";
@@ -31,6 +33,40 @@ function chatLanguageModelsSample(status) {
     },
     null,
     2
+  );
+}
+
+function fmtBytes(n) {
+  if (!n || n < 0) return "0 o";
+  const u = ["o", "Ko", "Mo", "Go", "To"];
+  let i = 0;
+  let v = n;
+  while (v >= 1024 && i < u.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(i === 0 ? 0 : 1)} ${u[i]}`;
+}
+
+function DownloadProgress({ job }) {
+  const pct = Math.max(0, Math.min(100, job?.progress || 0));
+  return (
+    <div className="mt-2">
+      <div className="h-2 w-full overflow-hidden rounded-full bg-ink-900">
+        <div
+          className="h-full rounded-full bg-brand transition-all duration-500"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="mt-1 flex justify-between text-[11px] text-slate-500">
+        <span>{pct.toFixed(0)}%</span>
+        {job?.total_bytes > 0 && (
+          <span>
+            {fmtBytes(job.downloaded_bytes)} / {fmtBytes(job.total_bytes)}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -63,6 +99,20 @@ export default function ModelsAdmin() {
     api.curated().then((r) => setCurated(r.models)).catch(() => {});
     api.downloadedModels().then((r) => setDownloaded(r.models)).catch(() => {});
     api.modelStatus().then(setStatus).catch(() => {});
+    // Seed jobs from the backend so in-progress downloads (started earlier or
+    // before a page reload) show their progress on the DGX cards.
+    api
+      .allDownloads()
+      .then((r) => {
+        const byId = {};
+        (r.jobs || []).forEach((j) => {
+          byId[j.model_id] = j;
+        });
+        if (Object.keys(byId).length) {
+          setJobs((p) => ({ ...byId, ...p }));
+        }
+      })
+      .catch(() => {});
   };
 
   useEffect(() => {
@@ -103,6 +153,20 @@ export default function ModelsAdmin() {
     setJobs((p) => ({ ...p, [model_id]: r.job }));
   };
 
+  const deleteModel = async (model_id) => {
+    if (!window.confirm(`Supprimer le modèle « ${model_id} » du disque ?`)) return;
+    try {
+      await api.deleteDownloadedModel(model_id);
+    } catch {}
+    if (selected === model_id) setSelected("");
+    setJobs((p) => {
+      const next = { ...p };
+      delete next[model_id];
+      return next;
+    });
+    refresh();
+  };
+
   const launch = async () => {
     if (!selected) return;
     setStatus({ ...status, message: "Lancement…" });
@@ -124,6 +188,23 @@ export default function ModelsAdmin() {
   const copy = (txt) => navigator.clipboard?.writeText(txt);
 
   const isDownloaded = (id) => downloaded.includes(id);
+
+  // Merge curated models with any locally-downloaded models not already curated,
+  // so the DGX section reflects what is actually present on disk.
+  const curatedIds = new Set(curated.map((m) => m.id));
+  const extraDownloaded = downloaded
+    .filter((id) => !curatedIds.has(id))
+    .map((id) => ({
+      id,
+      label: id,
+      params: "local",
+      approx_vram_gb: "?",
+      quant: "—",
+      note: "Modèle téléchargé localement.",
+      gated: false,
+      _local: true,
+    }));
+  const dgxModels = [...curated, ...extraDownloaded];
 
   return (
     <div className="space-y-6">
@@ -148,9 +229,10 @@ export default function ModelsAdmin() {
           subtitle="Modèles validés pour la mémoire unifiée ~128 Go"
         />
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {curated.map((m) => {
+          {dgxModels.map((m) => {
             const job = jobs[m.id];
             const done = isDownloaded(m.id) || job?.status === "done";
+            const busy = job?.status === "downloading" || job?.status === "pending";
             return (
               <div
                 key={m.id}
@@ -162,24 +244,41 @@ export default function ModelsAdmin() {
               >
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-white">{m.label}</span>
-                  <Badge tone="blue">{m.params}</Badge>
+                  <Badge tone={m._local ? "green" : "blue"}>{m.params}</Badge>
                 </div>
                 <p className="mt-1 text-xs text-slate-400">{m.note}</p>
                 <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
                   <span>~{m.approx_vram_gb} Go</span>·<span>{m.quant}</span>
                   {m.gated && <Badge tone="amber">gated</Badge>}
+                  {done && <Badge tone="green">téléchargé</Badge>}
                 </div>
                 <div className="mt-3 flex gap-2">
                   {done ? (
-                    <button
-                      className="btn-primary flex-1 justify-center"
-                      onClick={() => setSelected(m.id)}
-                    >
-                      <CheckCircle2 size={16} /> Sélectionner
-                    </button>
-                  ) : job?.status === "downloading" || job?.status === "pending" ? (
+                    <>
+                      <button
+                        className="btn-primary flex-1 justify-center"
+                        onClick={() => setSelected(m.id)}
+                      >
+                        <CheckCircle2 size={16} /> Sélectionner
+                      </button>
+                      <button
+                        className="btn-ghost justify-center text-rose-400 hover:text-rose-300"
+                        title="Supprimer du disque"
+                        onClick={() => deleteModel(m.id)}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </>
+                  ) : busy ? (
                     <button className="btn-ghost flex-1 justify-center" disabled>
                       <Loader2 size={16} className="animate-spin" /> Téléchargement…
+                    </button>
+                  ) : job?.status === "error" ? (
+                    <button
+                      className="btn-ghost flex-1 justify-center"
+                      onClick={() => download(m.id)}
+                    >
+                      <RotateCw size={16} /> Réessayer
                     </button>
                   ) : (
                     <button
@@ -190,6 +289,7 @@ export default function ModelsAdmin() {
                     </button>
                   )}
                 </div>
+                {busy && <DownloadProgress job={job} />}
                 {job?.status === "error" && (
                   <p className="mt-2 text-xs text-rose-400">{job.message}</p>
                 )}
@@ -224,33 +324,51 @@ export default function ModelsAdmin() {
           />
         </Field>
         <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
-          {results.map((r) => (
-            <div
-              key={r.id}
-              className="flex items-center justify-between rounded-lg border border-ink-border bg-ink-900/40 px-3 py-2"
-            >
-              <div className="min-w-0">
-                <div className="truncate font-mono text-sm text-white">{r.id}</div>
-                <div className="text-xs text-slate-500">
-                  ↓ {r.downloads?.toLocaleString?.() || 0} · ♥ {r.likes || 0}
-                  {r.gated && " · gated"}
-                </div>
-              </div>
-              {isDownloaded(r.id) || jobs[r.id]?.status === "done" ? (
-                <button className="btn-primary" onClick={() => setSelected(r.id)}>
-                  <CheckCircle2 size={16} /> Choisir
-                </button>
-              ) : (
-                <button className="btn-ghost" onClick={() => download(r.id)}>
-                  {jobs[r.id]?.status === "downloading" ? (
-                    <Loader2 size={16} className="animate-spin" />
+          {results.map((r) => {
+            const job = jobs[r.id];
+            const busy = job?.status === "downloading" || job?.status === "pending";
+            return (
+              <div
+                key={r.id}
+                className="rounded-lg border border-ink-border bg-ink-900/40 px-3 py-2"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <div className="truncate font-mono text-sm text-white">{r.id}</div>
+                    <div className="text-xs text-slate-500">
+                      ↓ {r.downloads?.toLocaleString?.() || 0} · ♥ {r.likes || 0}
+                      {r.gated && " · gated"}
+                    </div>
+                  </div>
+                  {isDownloaded(r.id) || job?.status === "done" ? (
+                    <button className="btn-primary" onClick={() => setSelected(r.id)}>
+                      <CheckCircle2 size={16} /> Choisir
+                    </button>
+                  ) : job?.status === "error" ? (
+                    <button className="btn-ghost" onClick={() => download(r.id)}>
+                      <RotateCw size={16} /> Réessayer
+                    </button>
                   ) : (
-                    <Download size={16} />
+                    <button
+                      className="btn-ghost"
+                      onClick={() => download(r.id)}
+                      disabled={busy}
+                    >
+                      {busy ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Download size={16} />
+                      )}
+                    </button>
                   )}
-                </button>
-              )}
-            </div>
-          ))}
+                </div>
+                {busy && <DownloadProgress job={job} />}
+                {job?.status === "error" && (
+                  <p className="mt-1 text-xs text-rose-400">{job.message}</p>
+                )}
+              </div>
+            );
+          })}
         </div>
       </Card>
 

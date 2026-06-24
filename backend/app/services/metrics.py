@@ -32,6 +32,21 @@ class RequestRecord:
     tokens_in: int
     tokens_out: int
     endpoint: str
+    power_w: float = 0.0       # GPU power draw at request time (watts)
+    energy_wh: float = 0.0     # estimated energy consumed by the request (Wh)
+    co2_g: float = 0.0         # estimated CO2 emissions (grams, France grid)
+
+
+@dataclass
+class StudioRecord:
+    ts: float
+    kind: str                  # "image" (text->image) | "mesh" (image->3D)
+    duration_s: float          # wall-clock generation time (seconds)
+    label: str = ""            # prompt or source asset name
+    model: str = ""            # model id used for the generation
+    power_w: float = 0.0       # GPU power draw at generation time (watts)
+    energy_wh: float = 0.0     # estimated energy consumed (Wh)
+    co2_g: float = 0.0         # estimated CO2 emissions (grams, France grid)
 
 
 class MetricsStore:
@@ -51,6 +66,10 @@ class MetricsStore:
         self.connected_clients: int = 0
         self.indexed_files: int = 0
         self.indexed_chunks: int = 0
+
+        # Studio 3D (text->image + image->3D) counters and rolling history.
+        self.studio_requests: int = 0
+        self.studio_history: Deque[StudioRecord] = deque(maxlen=500)
 
         # tokens/sec rolling (last 10s window of out tokens)
         self._token_window: Deque[tuple[float, int]] = deque(maxlen=500)
@@ -72,10 +91,38 @@ class MetricsStore:
             self.total_requests += 1
             self.total_tokens_in += tokens_in
             self.total_tokens_out += tokens_out
+            # Estimate energy/CO2 from the live GPU power draw (fallback to the
+            # configured average power when no sample is available yet).
+            power_w = (
+                self.gpu_history[-1].power_w
+                if self.gpu_history
+                else settings.inference_power_w
+            )
+            energy_wh = power_w * (latency_ms / 1000.0) / 3600.0
+            co2_g = (energy_wh / 1000.0) * settings.carbon_intensity_g_per_kwh
             self.request_history.append(
-                RequestRecord(now, latency_ms, tokens_in, tokens_out, endpoint)
+                RequestRecord(now, latency_ms, tokens_in, tokens_out, endpoint,
+                              power_w, energy_wh, co2_g)
             )
             self._token_window.append((now, tokens_out))
+
+    def record_studio(self, kind: str, duration_s: float,
+                      label: str = "", model: str = "") -> None:
+        """Record a Studio 3D generation and estimate its energy/CO2 cost."""
+        now = time.time()
+        with self._lock:
+            self.studio_requests += 1
+            power_w = (
+                self.gpu_history[-1].power_w
+                if self.gpu_history
+                else settings.inference_power_w
+            )
+            energy_wh = power_w * (duration_s / 3600.0)
+            co2_g = (energy_wh / 1000.0) * settings.carbon_intensity_g_per_kwh
+            self.studio_history.append(
+                StudioRecord(now, kind, duration_s, label, model,
+                             power_w, energy_wh, co2_g)
+            )
 
     def set_clients(self, n: int) -> None:
         with self._lock:
@@ -116,6 +163,55 @@ class MetricsStore:
         total = sum(n for _, n in recent)
         span = max(now - recent[0][0], 1e-6)
         return total / span
+
+    def recent_requests(self, n: int = 3) -> list[dict]:
+        """Return the ``n`` most recent requests, newest first."""
+        with self._lock:
+            items = list(self.request_history)[-n:]
+        return [
+            {
+                "ts": r.ts,
+                "latency_ms": round(r.latency_ms, 1),
+                "tokens_in": r.tokens_in,
+                "tokens_out": r.tokens_out,
+                "power_w": round(r.power_w, 1),
+                "energy_wh": round(r.energy_wh, 4),
+                "co2_g": round(r.co2_g, 4),
+                "endpoint": r.endpoint,
+            }
+            for r in reversed(items)
+        ]
+
+    def recent_studio(self, n: int = 5) -> list[dict]:
+        """Return the ``n`` most recent Studio 3D generations, newest first."""
+        with self._lock:
+            items = list(self.studio_history)[-n:]
+        return [
+            {
+                "ts": r.ts,
+                "kind": r.kind,
+                "duration_s": round(r.duration_s, 1),
+                "label": r.label,
+                "model": r.model,
+                "power_w": round(r.power_w, 1),
+                "energy_wh": round(r.energy_wh, 4),
+                "co2_g": round(r.co2_g, 4),
+            }
+            for r in reversed(items)
+        ]
+
+    def studio_totals(self) -> dict[str, float]:
+        """Aggregate energy/CO2 across all recorded Studio 3D generations."""
+        with self._lock:
+            records = list(self.studio_history)
+            requests = self.studio_requests
+        return {
+            "requests": requests,
+            "images": sum(1 for r in records if r.kind == "image"),
+            "meshes": sum(1 for r in records if r.kind == "mesh"),
+            "energy_wh": round(sum(r.energy_wh for r in records), 4),
+            "co2_g": round(sum(r.co2_g for r in records), 4),
+        }
 
     def latency_percentiles(self) -> dict[str, float]:
         with self._lock:
@@ -167,6 +263,12 @@ class MetricsStore:
             "tokens_per_second": round(self.tokens_per_second(), 1),
             "latency": {k: round(v, 1) for k, v in self.latency_percentiles().items()},
             "counters": counters,
+            "recent_requests": self.recent_requests(3),
+            "studio": {
+                "totals": self.studio_totals(),
+                "recent": self.recent_studio(5),
+            },
+            "carbon_intensity_g_per_kwh": settings.carbon_intensity_g_per_kwh,
             "history": history,
         }
 
