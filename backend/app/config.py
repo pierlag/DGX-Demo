@@ -1,8 +1,8 @@
-"""Central configuration for the vibeMCP backend.
+"""Central configuration for the DGX Demo backend.
 
 All tunable paths and defaults live here. Values can be overridden with a
 `.env` file at the repository root or via environment variables prefixed with
-``VIBEMCP_``.
+``DGX_DEMO_``.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="VIBEMCP_",
+        env_prefix="DGX_DEMO_",
         env_file=str(REPO_ROOT / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     # --- HuggingFace ---
     # Access token used as the default for model downloads. Required for gated
     # models (Llama, Gemma…) and gives higher rate limits / faster downloads.
-    # Override in .env via VIBEMCP_HF_TOKEN. Get one at:
+    # Override in .env via DGX_DEMO_HF_TOKEN. Get one at:
     # https://huggingface.co/settings/tokens
     hf_token: str = ""
     # Enable the Rust-based hf_transfer accelerator for much faster downloads
@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     vllm_port: int = 8001    # Public multi-arch image (linux/arm64 included). Override in .env if you
     # have a private NGC image.
     vllm_docker_image: str = "vllm/vllm-openai:latest"
-    vllm_container_name: str = "vibemcp-vllm"
+    vllm_container_name: str = "dgx-demo-vllm"
 
     # --- Embeddings (fastembed, ONNX, multilingual) ---
     embedding_model: str = "intfloat/multilingual-e5-large"
@@ -67,8 +67,8 @@ class Settings(BaseSettings):
     # Containerised runtime: the native CUDA extensions are compiled inside this
     # image so the host venv stays clean. The base image must ship CUDA + nvcc +
     # a matching PyTorch (NGC pytorch is multi-arch incl. GB10/Blackwell).
-    trellis_docker_image: str = "vibemcp-trellis:latest"
-    trellis_container_name: str = "vibemcp-trellis"
+    trellis_docker_image: str = "dgx-demo-trellis:latest"
+    trellis_container_name: str = "dgx-demo-trellis"
     trellis_base_image: str = "nvcr.io/nvidia/pytorch:25.04-py3"
     # CUDA arch list for the in-image native builds. The NGC PyTorch only knows
     # arches up to 12.0; GB10 (sm_121) runs the 12.0 PTX via JIT (+PTX). Do NOT
@@ -114,7 +114,7 @@ class Settings(BaseSettings):
 
     # --- GitHub OAuth (issue reporting via Device Flow) ---
     # Client ID of a GitHub OAuth App with "Device Flow" enabled. Required to
-    # request the ``repo`` scope. Override in .env via VIBEMCP_GITHUB_CLIENT_ID.
+    # request the ``repo`` scope. Override in .env via DGX_DEMO_GITHUB_CLIENT_ID.
     github_client_id: str = ""
     github_oauth_scope: str = "repo"
 

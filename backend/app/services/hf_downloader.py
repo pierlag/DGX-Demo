@@ -238,7 +238,7 @@ class DownloadManager:
         return total
 
     def start_download(self, model_id: str, hf_token: str | None = None) -> DownloadJob:
-        # Fall back to the token configured in .env (VIBEMCP_HF_TOKEN).
+        # Fall back to the token configured in .env (DGX_DEMO_HF_TOKEN).
         hf_token = hf_token or settings.hf_token or None
         with self._lock:
             existing = self._jobs.get(model_id)

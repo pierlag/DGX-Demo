@@ -10,7 +10,7 @@ websockets==14.1
 
 # --- Models / HuggingFace ---
 huggingface_hub==0.27.1
-# Optional Rust accelerator: much faster model downloads (VIBEMCP_HF_*).
+# Optional Rust accelerator: much faster model downloads (DGX_DEMO_HF_*).
 hf_transfer==0.1.8
 
 # --- Vector DB + embeddings (fastembed = ONNX, ARM-friendly, no torch) ---

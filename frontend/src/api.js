@@ -1,4 +1,4 @@
-// Thin API client for the vibeMCP backend.
+// Thin API client for the DGX Demo backend.
 const J = { "Content-Type": "application/json" };
 
 async function req(path, opts = {}) {

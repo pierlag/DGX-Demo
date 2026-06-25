@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# vibeMCP — démarrage de tous les services (Qdrant, backend, frontend).
+# DGX Demo — démarrage de tous les services (Qdrant, backend, frontend).
 set -e
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"

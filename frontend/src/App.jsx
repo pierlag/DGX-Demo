@@ -50,9 +50,9 @@ export default function App() {
           </button>
           <div className="flex items-center gap-2">
             <div className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-black font-extrabold">
-              v
+              D
             </div>
-            <span className="text-base font-extrabold text-white">vibeMCP</span>
+            <span className="text-base font-extrabold text-white">DGX Demo</span>
           </div>
           <Activity
             size={16}

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# vibeMCP — nettoyage des processus/services bloqués.
+# DGX Demo — nettoyage des processus/services bloqués.
 # - Stoppe backend (uvicorn)
 # - Stoppe frontend (vite / npm run dev)
 # - Stoppe les tunnels DevTunnel (devtunnel host)
@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 
-echo "==> Nettoyage vibeMCP"
+echo "==> Nettoyage DGX Demo"
 
 # 1) Stopper les processus Python/Node liés au dev
 # (ignore les erreurs si aucun processus ne correspond)
@@ -75,7 +75,7 @@ else
 fi
 
 if command -v docker >/dev/null 2>&1; then
-  if docker ps --format '{{.Names}}' | grep -q '^vibemcp-qdrant$'; then
+  if docker ps --format '{{.Names}}' | grep -q '^dgx-demo-qdrant$'; then
     echo "✗ Qdrant encore actif"
   else
     echo "✓ Qdrant arrêté"

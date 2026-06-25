@@ -436,9 +436,10 @@ class StudioManager:
             preview = h.get("preview")
             ppath = settings.studio_assets_dir / preview if preview else None
             if ppath is not None and ppath.exists():
-                # Cache-bust on mtime so a re-capture replaces the old thumbnail.
+                # Cache-bust on a per-entry counter so any re-capture (even within
+                # the same second) yields a fresh URL and replaces the thumbnail.
                 entry["preview_url"] = (
-                    f"/api/studio3d/file/{preview}?v={int(ppath.stat().st_mtime)}"
+                    f"/api/studio3d/file/{preview}?v={h.get('preview_v', 0)}"
                 )
             items.append(entry)
         return items
@@ -465,6 +466,7 @@ class StudioManager:
             for h in self._history:
                 if h.get("name") == name:
                     h["preview"] = preview_name
+                    h["preview_v"] = int(h.get("preview_v", 0)) + 1
                     break
             self._save_history()
         return {

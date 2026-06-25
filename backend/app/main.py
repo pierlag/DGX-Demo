@@ -1,4 +1,4 @@
-"""vibeMCP backend entry point.
+"""DGX Demo backend entry point.
 
 FastAPI app wiring together the four admin/monitoring surfaces:
   1. /api/models   - vLLM model selection / download / launch

@@ -1,1 +1,1 @@
-"""Package init for the vibeMCP backend application."""
+"""Package init for the DGX Demo backend application."""

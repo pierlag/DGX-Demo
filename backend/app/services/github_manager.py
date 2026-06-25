@@ -122,7 +122,7 @@ class GitHubManager:
                 "login": "",
                 "device": dict(self._device),
                 "message": (
-                    "VIBEMCP_GITHUB_CLIENT_ID n'est pas configuré. Créez une "
+                    "DGX_DEMO_GITHUB_CLIENT_ID n'est pas configuré. Créez une "
                     "OAuth App GitHub (Device Flow activé) et renseignez son "
                     "Client ID dans le fichier .env."
                 ),

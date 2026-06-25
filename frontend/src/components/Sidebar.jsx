@@ -63,10 +63,10 @@ export default function Sidebar({
           onClick={onLogoClick}
           className="grid h-10 w-10 place-items-center rounded-xl bg-brand text-black font-extrabold"
         >
-          v
+          D
         </button>
         <div>
-          <div className="text-lg font-extrabold leading-none text-white">vibeMCP</div>
+          <div className="text-lg font-extrabold leading-none text-white">DGX Demo</div>
           <div className="text-[11px] font-medium text-brand">DGX Spark · GB10</div>
         </div>
       </div>

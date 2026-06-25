@@ -1,4 +1,4 @@
-# vibeMCP — Serveur MCP RAG + Dashboard pour DGX Spark (GB10)
+# DGX Demo — Serveur MCP RAG + Dashboard pour DGX Spark (GB10)
 
 Serveur **MCP** exposé par **devtunnel**, faisant du **RAG** sur un répertoire
 local (`ragdoclocal`), adossé à un serveur **vLLM** qui charge un modèle
@@ -86,7 +86,7 @@ Qdrant sur `:6333`.
 
 Par défaut, le projet utilise `vllm/vllm-openai:latest` (multi-arch, dont
 `linux/arm64`). Vous pouvez remplacer dans `.env`
-(`VIBEMCP_VLLM_DOCKER_IMAGE`) par une image NGC privée si besoin.
+(`DGX_DEMO_VLLM_DOCKER_IMAGE`) par une image NGC privée si besoin.
 Depuis l'admin **Modèles vLLM** :
 télécharger un modèle (ex. `Qwen/Qwen2.5-14B-Instruct`), régler les paramètres,
 puis **Lancer**. Le dashboard affiche alors les tokens/s en temps réel.
