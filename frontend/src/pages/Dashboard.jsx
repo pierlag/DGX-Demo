@@ -114,6 +114,16 @@ export default function Dashboard({ metrics, connected }) {
   const cur = m.current || {};
   const counters = m.counters || {};
   const lat = m.latency || {};
+  // vLLM engine metrics (scraped from vLLM's own /metrics) capture ALL traffic
+  // — including the offline Copilot CLI and external clients that bypass the
+  // backend. Prefer them so the dashboard reflects real engine activity.
+  const eng = m.vllm || {};
+  const engUp = !!eng.up;
+  const engLat = engUp ? eng.latency || {} : lat;
+  const tokensPerSec = engUp ? eng.tokens_per_second : m.tokens_per_second;
+  const tokensIn = engUp ? eng.tokens_in : counters.total_tokens_in;
+  const tokensOut = engUp ? eng.tokens_out : counters.total_tokens_out;
+  const reqTotal = engUp ? eng.requests : counters.total_requests;
   const series = toSeries(m.history);
   const memPct = cur.mem_total_mb
     ? Math.round((cur.mem_used_mb / cur.mem_total_mb) * 100)
@@ -153,36 +163,41 @@ export default function Dashboard({ metrics, connected }) {
             </div>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="font-mono text-4xl font-extrabold text-white tabular-nums sm:text-6xl">
-                {fmt(m.tokens_per_second)}
+                {fmt(tokensPerSec)}
               </span>
               <span className="text-lg text-slate-300 sm:text-xl">tokens/s</span>
             </div>
             <p className="mt-1 text-sm text-slate-400">
               Total traité&nbsp;:{" "}
               <span className="font-mono text-brand">
-                {fmt(counters.total_tokens_in + counters.total_tokens_out)}
+                {fmt((tokensIn || 0) + (tokensOut || 0))}
               </span>{" "}
-              tokens · {fmt(counters.total_tokens_in)} entrée /{" "}
-              {fmt(counters.total_tokens_out)} sortie
+              tokens · {fmt(tokensIn)} entrée /{" "}
+              {fmt(tokensOut)} sortie
+              {engUp ? (
+                <span className="ml-2 text-slate-500">
+                  · moteur vLLM{eng.running ? ` · ${eng.running} actives` : ""}
+                </span>
+              ) : null}
             </p>
           </div>
           <div className="grid w-full grid-cols-3 gap-4 text-center sm:w-auto sm:gap-6">
             <div>
               <div className="font-mono text-2xl font-bold text-white">
-                {fmt(counters.total_requests)}
+                {fmt(reqTotal)}
               </div>
               <div className="label">Requêtes</div>
             </div>
             <div>
               <div className="font-mono text-2xl font-bold text-white">
-                {Math.round(lat.p50 || 0)}
+                {Math.round(engLat.p50 || 0)}
                 <span className="text-sm text-slate-400">ms</span>
               </div>
               <div className="label">Latence p50</div>
             </div>
             <div>
               <div className="font-mono text-2xl font-bold text-white">
-                {Math.round(lat.p95 || 0)}
+                {Math.round(engLat.p95 || 0)}
                 <span className="text-sm text-slate-400">ms</span>
               </div>
               <div className="label">Latence p95</div>

@@ -49,6 +49,15 @@ class StudioRecord:
     co2_g: float = 0.0         # estimated CO2 emissions (grams, France grid)
 
 
+@dataclass
+class CopilotRecord:
+    ts: float
+    test: str                  # validation test name (models/chat/stream/tools)
+    ok: bool                   # pass/fail
+    latency_ms: float          # round-trip latency of the test turn
+    detail: str = ""           # short human-readable result / error
+
+
 class MetricsStore:
     """Thread-safe metrics store (sampler thread + request handlers write)."""
 
@@ -70,6 +79,24 @@ class MetricsStore:
         # Studio 3D (text->image + image->3D) counters and rolling history.
         self.studio_requests: int = 0
         self.studio_history: Deque[StudioRecord] = deque(maxlen=500)
+
+        # GitHub Copilot CLI (offline BYOK against the local vLLM server).
+        self.copilot_turns: int = 0
+        self.copilot_tool_calls: int = 0
+        self.copilot_errors: int = 0
+        self.copilot_session_active: bool = False
+        self.copilot_last_latency_ms: float = 0.0
+        self.copilot_history: Deque[CopilotRecord] = deque(maxlen=500)
+
+        # Monotonic energy/CO2 totals (Wh / grams) across every workload, so the
+        # Prometheus exporter can publish true cumulative counters.
+        self.total_energy_wh: float = 0.0
+        self.total_co2_g: float = 0.0
+
+        # Latest summary scraped from vLLM's own Prometheus endpoint. Captures
+        # ALL engine traffic (including the offline Copilot CLI / external
+        # clients) that bypasses this backend. Updated by the vLLM sampler.
+        self._vllm: dict = {"up": False}
 
         # tokens/sec rolling (last 10s window of out tokens)
         self._token_window: Deque[tuple[float, int]] = deque(maxlen=500)
@@ -100,6 +127,8 @@ class MetricsStore:
             )
             energy_wh = power_w * (latency_ms / 1000.0) / 3600.0
             co2_g = (energy_wh / 1000.0) * settings.carbon_intensity_g_per_kwh
+            self.total_energy_wh += energy_wh
+            self.total_co2_g += co2_g
             self.request_history.append(
                 RequestRecord(now, latency_ms, tokens_in, tokens_out, endpoint,
                               power_w, energy_wh, co2_g)
@@ -119,10 +148,66 @@ class MetricsStore:
             )
             energy_wh = power_w * (duration_s / 3600.0)
             co2_g = (energy_wh / 1000.0) * settings.carbon_intensity_g_per_kwh
+            self.total_energy_wh += energy_wh
+            self.total_co2_g += co2_g
             self.studio_history.append(
                 StudioRecord(now, kind, duration_s, label, model,
                              power_w, energy_wh, co2_g)
             )
+
+    def record_copilot(self, test: str, ok: bool, latency_ms: float,
+                       detail: str = "", tool_calls: int = 0) -> None:
+        """Record one Copilot BYOK validation turn (run against the vLLM server).
+
+        Feeds the dashboard + Grafana "Copilot CLI activity" panels: every test
+        counts as a turn, tool-call tests bump the tool-call counter, failures
+        bump the error counter, and the local inference cost is added to the
+        global energy/CO2 totals.
+        """
+        now = time.time()
+        with self._lock:
+            self.copilot_turns += 1
+            self.copilot_tool_calls += max(0, tool_calls)
+            if not ok:
+                self.copilot_errors += 1
+            self.copilot_last_latency_ms = latency_ms
+            self.copilot_history.append(
+                CopilotRecord(now, test, ok, latency_ms, detail)
+            )
+            power_w = (
+                self.gpu_history[-1].power_w
+                if self.gpu_history
+                else settings.inference_power_w
+            )
+            energy_wh = power_w * (latency_ms / 1000.0) / 3600.0
+            self.total_energy_wh += energy_wh
+            self.total_co2_g += (
+                energy_wh / 1000.0
+            ) * settings.carbon_intensity_g_per_kwh
+
+    def set_copilot_session(self, active: bool) -> None:
+        with self._lock:
+            self.copilot_session_active = bool(active)
+
+    def set_vllm(self, data: dict) -> None:
+        """Store the latest summary scraped from vLLM's Prometheus endpoint."""
+        with self._lock:
+            self._vllm = dict(data)
+
+    def recent_copilot(self, n: int = 8) -> list[dict]:
+        """Return the ``n`` most recent Copilot validation turns, newest first."""
+        with self._lock:
+            items = list(self.copilot_history)[-n:]
+        return [
+            {
+                "ts": r.ts,
+                "test": r.test,
+                "ok": r.ok,
+                "latency_ms": round(r.latency_ms, 1),
+                "detail": r.detail,
+            }
+            for r in reversed(items)
+        ]
 
     def set_clients(self, n: int) -> None:
         with self._lock:
@@ -251,7 +336,17 @@ class MetricsStore:
                 "connected_clients": self.connected_clients,
                 "indexed_files": self.indexed_files,
                 "indexed_chunks": self.indexed_chunks,
+                "total_energy_wh": round(self.total_energy_wh, 4),
+                "total_co2_g": round(self.total_co2_g, 4),
             }
+            copilot = {
+                "turns": self.copilot_turns,
+                "tool_calls": self.copilot_tool_calls,
+                "errors": self.copilot_errors,
+                "session_active": self.copilot_session_active,
+                "last_latency_ms": round(self.copilot_last_latency_ms, 1),
+            }
+            vllm = dict(self._vllm)
         return {
             "current": {
                 "gpu_util": round(latest.gpu_util, 1) if latest else 0.0,
@@ -268,6 +363,11 @@ class MetricsStore:
                 "totals": self.studio_totals(),
                 "recent": self.recent_studio(5),
             },
+            "copilot": {
+                **copilot,
+                "recent": self.recent_copilot(8),
+            },
+            "vllm": vllm,
             "carbon_intensity_g_per_kwh": settings.carbon_intensity_g_per_kwh,
             "history": history,
         }

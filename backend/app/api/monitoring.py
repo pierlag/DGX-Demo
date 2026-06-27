@@ -1,11 +1,13 @@
-"""Monitoring: live metrics over WebSocket + snapshot endpoint."""
+"""Monitoring: live metrics over WebSocket + snapshot + Prometheus endpoint."""
 from __future__ import annotations
 
 import asyncio
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
+from app.services import prometheus_exporter
 from app.services.metrics import metrics_store
 
 router = APIRouter(tags=["monitoring"])
@@ -24,6 +26,15 @@ class MetricsIngest(BaseModel):
 @router.get("/api/metrics/snapshot")
 def snapshot():
     return metrics_store.snapshot()
+
+
+@router.get("/metrics", response_class=PlainTextResponse)
+def prometheus_metrics():
+    """Prometheus exposition endpoint scraped by the bundled Grafana stack."""
+    return PlainTextResponse(
+        prometheus_exporter.render(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
 
 
 @router.post("/api/metrics/ingest")

@@ -1,0 +1,15 @@
+# Grafana dashboard provider — loads every JSON in /var/lib/grafana/dashboards
+# on startup, so the DGX dashboard is ready with no manual import.
+apiVersion: 1
+
+providers:
+  - name: dgx
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    updateIntervalSeconds: 10
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

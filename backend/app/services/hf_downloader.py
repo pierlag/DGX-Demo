@@ -206,7 +206,11 @@ class DownloadManager:
             self._jobs.pop(model_id, None)
         return {"ok": True}
 
-    _IGNORE_PATTERNS = ["*.pth", "*.onnx", "original/*"]
+    # vLLM only needs the root *.safetensors + config/tokenizer files.
+    # Skip large alternate-format weights that would otherwise be fetched:
+    #   - original/*  : reference PyTorch checkpoint
+    #   - metal/*     : Apple-Metal model.bin (~13.8 GB, stalls on the HF CDN)
+    _IGNORE_PATTERNS = ["*.pth", "*.onnx", "original/*", "metal/*"]
 
     def _expected_total_bytes(self, model_id: str, hf_token: str | None) -> int:
         """Sum of file sizes for the repo, excluding ignored patterns."""

@@ -10,12 +10,16 @@ import {
   Container,
   Globe,
   Boxes,
+  BarChart3,
+  Bot,
 } from "lucide-react";
 
 const links = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
+  { to: "/monitoring", label: "Monitoring", icon: BarChart3 },
   { to: "/models", label: "Modèles vLLM", icon: Cpu },
   { to: "/mcp", label: "Serveur MCP", icon: Network },
+  { to: "/copilot", label: "Copilot CLI", icon: Bot },
   { to: "/tunnels", label: "Tunnels", icon: Globe },
   { to: "/docker", label: "Gestion Docker", icon: Container },
   { to: "/rag", label: "RAG / Documents", icon: Database },
@@ -34,7 +38,7 @@ export default function Sidebar({
   const clickTimerRef = useRef(null);
 
   const visibleLinks = kioskMode
-    ? links.filter((l) => l.to === "/" || l.to === "/chat" || l.to === "/studio3d")
+    ? links.filter((l) => l.to === "/" || l.to === "/monitoring" || l.to === "/chat" || l.to === "/studio3d")
     : links;
 
   const onLogoClick = () => {

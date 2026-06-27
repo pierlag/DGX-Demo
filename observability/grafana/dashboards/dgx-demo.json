@@ -1,0 +1,217 @@
+{
+  "uid": "dgx-demo",
+  "title": "DGX Demo — Live Metrics",
+  "tags": ["dgx", "gb10", "vllm", "copilot"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "5s",
+  "editable": true,
+  "graphTooltip": 1,
+  "time": { "from": "now-15m", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1, "type": "row", "title": "GPU & Unified Memory (GB10)",
+      "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2, "type": "timeseries", "title": "GPU Utilisation (%)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100,
+        "custom": { "drawStyle": "line", "fillOpacity": 20, "lineWidth": 2 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "expr": "dgx_gpu_utilization_percent", "legendFormat": "GPU util" } ]
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "Unified Memory (MB)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "decmbytes",
+        "custom": { "drawStyle": "line", "fillOpacity": 15, "lineWidth": 2 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "dgx_gpu_memory_used_mb", "legendFormat": "used" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "dgx_gpu_memory_total_mb", "legendFormat": "total" }
+      ]
+    },
+    {
+      "id": 4, "type": "stat", "title": "GPU Power (W)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "watt", "color": { "mode": "thresholds" },
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 200 }, { "color": "red", "value": 350 } ] } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "dgx_gpu_power_watts" } ]
+    },
+    {
+      "id": 5, "type": "stat", "title": "GPU Temp (°C)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "celsius", "color": { "mode": "thresholds" },
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 70 }, { "color": "red", "value": 85 } ] } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "dgx_gpu_temperature_celsius" } ]
+    },
+    {
+      "id": 6, "type": "stat", "title": "Tokens / sec",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 1, "color": { "mode": "fixed", "fixedColor": "green" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "rate(dgx_vllm_generation_tokens_total[1m]) or dgx_tokens_per_second" } ]
+    },
+    {
+      "id": 7, "type": "row", "title": "vLLM Throughput",
+      "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 }
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Output Tokens / sec",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "none",
+        "custom": { "drawStyle": "line", "fillOpacity": 20, "lineWidth": 2 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "expr": "rate(dgx_vllm_generation_tokens_total[1m]) or dgx_tokens_per_second", "legendFormat": "tok/s" } ]
+    },
+    {
+      "id": 9, "type": "timeseries", "title": "Latency (ms)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "ms",
+        "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "dgx_vllm_latency_ms{quantile=\"0.5\"} or dgx_request_latency_ms{quantile=\"0.5\"}", "legendFormat": "p50" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "dgx_vllm_latency_ms{quantile=\"0.95\"} or dgx_request_latency_ms{quantile=\"0.95\"}", "legendFormat": "p95" }
+      ]
+    },
+    {
+      "id": 10, "type": "stat", "title": "Requests",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "none", "color": { "mode": "fixed", "fixedColor": "blue" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "dgx_vllm_requests_total or dgx_requests_total" } ]
+    },
+    {
+      "id": 11, "type": "stat", "title": "Tokens In",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "purple" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "dgx_vllm_prompt_tokens_total or dgx_tokens_in_total" } ]
+    },
+    {
+      "id": 12, "type": "stat", "title": "Tokens Out",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "green" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "dgx_vllm_generation_tokens_total or dgx_tokens_out_total" } ]
+    },
+    {
+      "id": 13, "type": "row", "title": "RAG & Copilot CLI (offline BYOK)",
+      "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 }
+    },
+    {
+      "id": 14, "type": "stat", "title": "Indexed Files",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 31 },
+      "fieldConfig": { "defaults": { "unit": "none", "color": { "mode": "fixed", "fixedColor": "blue" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "dgx_rag_indexed_files" } ]
+    },
+    {
+      "id": 15, "type": "stat", "title": "Indexed Chunks",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 31 },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "blue" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "dgx_rag_indexed_chunks" } ]
+    },
+    {
+      "id": 16, "type": "timeseries", "title": "Copilot — turns / tool calls / errors",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 31 },
+      "fieldConfig": { "defaults": { "unit": "none",
+        "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "dgx_copilot_turns_total", "legendFormat": "turns" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "dgx_copilot_tool_calls_total", "legendFormat": "tool calls" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "dgx_copilot_errors_total", "legendFormat": "errors" }
+      ]
+    },
+    {
+      "id": 17, "type": "stat", "title": "Copilot Session",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 37 },
+      "fieldConfig": { "defaults": { "unit": "none", "color": { "mode": "thresholds" },
+        "mappings": [ { "type": "value", "options": { "0": { "text": "Off", "color": "red" }, "1": { "text": "On", "color": "green" } } } ],
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "dgx_copilot_session_active" } ]
+    },
+    {
+      "id": 18, "type": "stat", "title": "Copilot Last Latency (ms)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 37 },
+      "fieldConfig": { "defaults": { "unit": "ms", "color": { "mode": "fixed", "fixedColor": "orange" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "dgx_copilot_last_latency_ms" } ]
+    },
+    {
+      "id": 19, "type": "row", "title": "Energy & Carbon (France grid)",
+      "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 45 }
+    },
+    {
+      "id": 20, "type": "stat", "title": "Energy (Wh)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 46 },
+      "fieldConfig": { "defaults": { "unit": "watth", "decimals": 3, "color": { "mode": "fixed", "fixedColor": "yellow" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "dgx_energy_wh_total" } ]
+    },
+    {
+      "id": 21, "type": "stat", "title": "CO₂ (g)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 46 },
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 3, "color": { "mode": "fixed", "fixedColor": "green" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "dgx_co2_grams_total" } ]
+    },
+    {
+      "id": 22, "type": "stat", "title": "Carbon Intensity (gCO₂/kWh)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 46 },
+      "fieldConfig": { "defaults": { "unit": "none", "color": { "mode": "fixed", "fixedColor": "blue" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "dgx_carbon_intensity_g_per_kwh" } ]
+    },
+    {
+      "id": 23, "type": "row", "title": "Logs (Loki)",
+      "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 52 }
+    },
+    {
+      "id": 24, "type": "logs", "title": "DGX container logs (vLLM · Qdrant · TRELLIS)",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 53 },
+      "options": { "showTime": true, "wrapLogMessage": true, "enableLogDetails": true,
+        "dedupStrategy": "none", "sortOrder": "Descending" },
+      "targets": [ { "refId": "A", "datasource": { "type": "loki", "uid": "loki" },
+        "expr": "{job=\"dgx\"}" } ]
+    }
+  ]
+}

@@ -11,6 +11,8 @@ import DockerAdmin from "./pages/DockerAdmin.jsx";
 import RagAdmin from "./pages/RagAdmin.jsx";
 import Chat from "./pages/Chat.jsx";
 import Studio3D from "./pages/Studio3D.jsx";
+import Monitoring from "./pages/Monitoring.jsx";
+import CopilotCli from "./pages/CopilotCli.jsx";
 
 export default function App() {
   const { data, connected } = useMetrics();
@@ -64,10 +66,12 @@ export default function App() {
           <div className="mx-auto max-w-7xl p-4 sm:p-6">
             <Routes>
               <Route path="/" element={<Dashboard metrics={data} connected={connected} />} />
+              <Route path="/monitoring" element={<Monitoring />} />
               <Route path="/chat" element={<Chat />} />
               <Route path="/studio3d" element={<Studio3D />} />
               {!kioskMode && <Route path="/models" element={<ModelsAdmin />} />}
               {!kioskMode && <Route path="/mcp" element={<McpAdmin />} />}
+              {!kioskMode && <Route path="/copilot" element={<CopilotCli />} />}
               {!kioskMode && <Route path="/tunnels" element={<TunnelsAdmin />} />}
               {!kioskMode && <Route path="/docker" element={<DockerAdmin />} />}
               {!kioskMode && <Route path="/rag" element={<RagAdmin />} />}

@@ -1,11 +1,13 @@
 """DGX Demo backend entry point.
 
-FastAPI app wiring together the four admin/monitoring surfaces:
+FastAPI app wiring together the admin/monitoring surfaces:
   1. /api/models   - vLLM model selection / download / launch
   2. /api/mcp      - MCP server config + devtunnel exposure
   3. /api/rag      - document upload + vectorization
   4. /api/chat     - local test chat
+  5. /api/copilot  - offline GitHub Copilot CLI / VS Code BYOK integration
   + /ws/metrics    - live dashboard metrics
+  + /metrics       - Prometheus exposition (scraped by the Grafana stack)
 """
 from __future__ import annotations
 
@@ -17,22 +19,26 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api import (
-    chat, docker_admin, mcp_admin, models, monitoring, rag, studio3d, tunnels,
+    chat, copilot, docker_admin, mcp_admin, models, monitoring, rag, studio3d,
+    tunnels,
 )
 from app.config import settings
 from app.services.gpu_monitor import gpu_monitor
 from app.services.rag_pipeline import rag_pipeline
+from app.services.vllm_metrics import vllm_metrics_sampler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     gpu_monitor.start()
+    vllm_metrics_sampler.start()
     try:
         rag_pipeline.refresh_stats()
     except Exception:
         pass
     yield
     await gpu_monitor.stop()
+    await vllm_metrics_sampler.stop()
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
@@ -52,6 +58,7 @@ app.include_router(docker_admin.router)
 app.include_router(studio3d.router)
 app.include_router(rag.router)
 app.include_router(chat.router)
+app.include_router(copilot.router)
 app.include_router(monitoring.router)
 
 

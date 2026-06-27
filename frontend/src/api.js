@@ -118,6 +118,21 @@ export const api = {
   studioDelete: (name) =>
     req(`/api/studio3d/file/${encodeURIComponent(name)}`, { method: "DELETE" }),
 
+  // Copilot CLI / VS Code chat (offline BYOK against vLLM)
+  copilotStatus: () => req("/api/copilot/status"),
+  copilotTest: () => req("/api/copilot/test", { method: "POST" }),
+  copilotConfig: () => req("/api/copilot/config"),
+  copilotWriteScript: () => req("/api/copilot/script", { method: "POST" }),
+  copilotSetSession: (active) =>
+    req("/api/copilot/session", { method: "POST", headers: J, body: JSON.stringify({ active }) }),
+
   // Metrics
   snapshot: () => req("/api/metrics/snapshot"),
+};
+
+// Base URL of the embedded Grafana instance (same host, port 3000). Works
+// locally and through a tunnel that forwards :3000.
+export const grafanaUrl = (path = "/d/dgx-demo/dgx-demo-live-metrics") => {
+  const host = window.location.hostname || "localhost";
+  return `http://${host}:3000${path}`;
 };

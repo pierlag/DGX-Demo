@@ -8,3 +8,77 @@ services:
       - "6334:6334"
     volumes:
       - ./data/qdrant:/qdrant/storage
+
+  # ============================ Observability ================================
+  # Embedded Grafana stack for the dashboard "Monitoring" page. Prometheus
+  # scrapes the FastAPI backend's /metrics (GPU/NVML, vLLM throughput, RAG,
+  # Copilot CLI activity, energy & CO2) and vLLM's native /metrics; Promtail
+  # ships the DGX container logs to Loki. All images are pinned for reproducible
+  # / airgapped runs (pull once while online).
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: dgx-demo-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus:/prometheus
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      # Lets Prometheus (in-container) scrape the backend + vLLM on the host.
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.2.1
+    container_name: dgx-demo-loki
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki:/loki
+    ports:
+      - "3100:3100"
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.2.1
+    container_name: dgx-demo-promtail
+    command: ["-config.file=/etc/promtail/promtail-config.yml"]
+    volumes:
+      - ./observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # discover + tail DGX containers
+    restart: unless-stopped
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: dgx-demo-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true          # local-only: open dashboards with no login
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_SECURITY_ALLOW_EMBEDDING=true        # embed the dashboard in an iframe
+      - GF_USERS_DEFAULT_THEME=dark
+      - GF_ANALYTICS_REPORTING_ENABLED=false    # airgap: never phone home
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_NEWS_NEWS_FEED_ENABLED=false
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana:/var/lib/grafana
+    ports:
+      - "3000:3000"                   # Grafana UI -> http://localhost:3000
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - loki
+
+volumes:
+  prometheus:
+  loki:
+  grafana:
+
