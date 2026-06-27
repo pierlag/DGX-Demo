@@ -11,6 +11,8 @@ import DockerAdmin from "./pages/DockerAdmin.jsx";
 import RagAdmin from "./pages/RagAdmin.jsx";
 import Chat from "./pages/Chat.jsx";
 import Studio3D from "./pages/Studio3D.jsx";
+import CopilotOffline from "./pages/CopilotOffline.jsx";
+import Observability from "./pages/Observability.jsx";
 
 export default function App() {
   const { data, connected } = useMetrics();
@@ -67,6 +69,8 @@ export default function App() {
               <Route path="/chat" element={<Chat />} />
               <Route path="/studio3d" element={<Studio3D />} />
               {!kioskMode && <Route path="/models" element={<ModelsAdmin />} />}
+              {!kioskMode && <Route path="/copilot" element={<CopilotOffline />} />}
+              {!kioskMode && <Route path="/observability" element={<Observability />} />}
               {!kioskMode && <Route path="/mcp" element={<McpAdmin />} />}
               {!kioskMode && <Route path="/tunnels" element={<TunnelsAdmin />} />}
               {!kioskMode && <Route path="/docker" element={<DockerAdmin />} />}

@@ -87,6 +87,20 @@ class Settings(BaseSettings):
     qdrant_port: int = 6333
     qdrant_collection: str = "ragdoclocal"
 
+    # --- Ollama (offline GitHub Copilot backend) ---
+    # Ollama exposes an OpenAI-compatible API consumed by the Copilot CLI and
+    # VS Code chat in offline mode. Models are pulled from the dashboard.
+    ollama_host: str = "127.0.0.1"
+    ollama_port: int = 11434
+    ollama_container_name: str = "dgx-demo-ollama"
+    ollama_image: str = "ollama/ollama:0.30.10"
+
+    # --- Grafana (embedded observability dashboards) ---
+    # Port the Grafana container publishes; the dashboard embeds it in an iframe.
+    grafana_port: int = 3000
+    # UID of the provisioned dashboard (see observability/grafana/dashboards).
+    grafana_dashboard_uid: str = "ollama-copilot"
+
     # --- MCP server ---
     mcp_host: str = "127.0.0.1"
     mcp_port: int = 9000
@@ -125,6 +139,14 @@ class Settings(BaseSettings):
     @property
     def trellis_base_url(self) -> str:
         return f"http://{self.trellis_host}:{self.trellis_port}"
+
+    @property
+    def ollama_base_url(self) -> str:
+        return f"http://{self.ollama_host}:{self.ollama_port}"
+
+    @property
+    def ollama_openai_url(self) -> str:
+        return f"http://{self.ollama_host}:{self.ollama_port}/v1"
 
     def ensure_dirs(self) -> None:
         for d in (self.rag_docs_dir, self.models_dir, self.state_dir,
