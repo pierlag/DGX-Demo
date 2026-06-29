@@ -120,4 +120,28 @@ export const api = {
 
   // Metrics
   snapshot: () => req("/api/metrics/snapshot"),
+
+  // Ollama (offline Copilot backend) — search / pull / run models
+  ollamaStatus: () => req("/api/ollama/status"),
+  ollamaSearch: (q) => req(`/api/ollama/search?q=${encodeURIComponent(q)}`),
+  ollamaTags: (name) => req(`/api/ollama/tags?name=${encodeURIComponent(name)}`),
+  ollamaModels: () => req("/api/ollama/models"),
+  ollamaShow: (name) => req(`/api/ollama/show?name=${encodeURIComponent(name)}`),
+  ollamaPull: (model, signal) =>
+    fetch("/api/ollama/pull", { method: "POST", headers: J, body: JSON.stringify({ model }), signal }),
+  ollamaLoad: (name) =>
+    req("/api/ollama/load", { method: "POST", headers: J, body: JSON.stringify({ name }) }),
+  ollamaStop: (name) =>
+    req("/api/ollama/stop", { method: "POST", headers: J, body: JSON.stringify({ name }) }),
+  ollamaDelete: (name) =>
+    req(`/api/ollama/models?name=${encodeURIComponent(name)}`, { method: "DELETE" }),
+  ollamaStartContainer: () => req("/api/ollama/container/start", { method: "POST" }),
+  ollamaStopContainer: () => req("/api/ollama/container/stop", { method: "POST" }),
+
+  // GitHub Copilot offline integration (CLI + VS Code chat)
+  copilotStatus: () => req("/api/copilot/status"),
+  copilotTest: (model) =>
+    req("/api/copilot/test", { method: "POST", headers: J, body: JSON.stringify({ model }) }),
+  copilotLaunch: (model) =>
+    req(`/api/copilot/launch${model ? `?model=${encodeURIComponent(model)}` : ""}`),
 };

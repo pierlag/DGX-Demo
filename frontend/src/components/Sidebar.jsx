@@ -10,11 +10,15 @@ import {
   Container,
   Globe,
   Boxes,
+  Bot,
+  Gauge,
 } from "lucide-react";
 
 const links = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/models", label: "Modèles vLLM", icon: Cpu },
+  { to: "/copilot", label: "Copilot hors-ligne", icon: Bot },
+  { to: "/observability", label: "Observabilité", icon: Gauge },
   { to: "/mcp", label: "Serveur MCP", icon: Network },
   { to: "/tunnels", label: "Tunnels", icon: Globe },
   { to: "/docker", label: "Gestion Docker", icon: Container },

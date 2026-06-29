@@ -17,7 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api import (
-    chat, docker_admin, mcp_admin, models, monitoring, rag, studio3d, tunnels,
+    chat, copilot, docker_admin, mcp_admin, models, monitoring, ollama, rag,
+    studio3d, tunnels,
 )
 from app.config import settings
 from app.services.gpu_monitor import gpu_monitor
@@ -53,6 +54,8 @@ app.include_router(studio3d.router)
 app.include_router(rag.router)
 app.include_router(chat.router)
 app.include_router(monitoring.router)
+app.include_router(ollama.router)
+app.include_router(copilot.router)
 
 
 @app.get("/api/health")

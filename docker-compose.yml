@@ -8,3 +8,132 @@ services:
       - "6334:6334"
     volumes:
       - ./data/qdrant:/qdrant/storage
+
+  # ======================= Offline GitHub Copilot backend ====================
+  # Ollama exposes an OpenAI-compatible Chat Completions API on :11434, which
+  # the GitHub Copilot CLI (and VS Code chat) talk to in offline/airgapped mode
+  # via the COPILOT_PROVIDER_* environment variables. Models are pulled from the
+  # dashboard (Copilot Offline page) and persisted in the named volume.
+  ollama:
+    image: ollama/ollama:0.30.10            # pinned for reproducible / airgapped runs
+    container_name: dgx-demo-ollama
+    ports:
+      - "11434:11434"                       # OpenAI-compatible endpoint
+    volumes:
+      - ollama:/root/.ollama                # persists pulled models
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+      - OLLAMA_CONTEXT_LENGTH=32768
+      - OLLAMA_KEEP_ALIVE=30m
+      - NVIDIA_VISIBLE_DEVICES=all          # expose the GB10 GPU to the runtime
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    # ---- GPU acceleration (NVIDIA GB10 + Container Toolkit) -----------------
+    # Comment this block out on hosts without an NVIDIA GPU (CPU-only fallback).
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu"]
+
+  # ============================ Observability ================================
+  # Grafana dashboards (embedded in the dashboard "Observability" page). The
+  # exporter parses the Ollama logs (Docker Engine API) + polls /api/ps and
+  # exposes Prometheus metrics; Promtail ships the raw logs to Loki for the
+  # per-request tables. All images pinned for reproducible / airgapped runs.
+  ollama-exporter:
+    image: node:22.11.0-alpine              # zero npm deps — runs the mounted script as-is
+    container_name: dgx-demo-ollama-exporter
+    command: ["node", "/app/ollama-exporter.js"]
+    working_dir: /app
+    environment:
+      - METRICS_PORT=9105
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_CONTAINER=dgx-demo-ollama
+      - DOCKER_SOCKET=/var/run/docker.sock
+      - KV_CTX=32768
+      - KV_FULL_MIB=3584
+      - LOG_TAIL=600
+    volumes:
+      - ./observability/exporter:/app:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # read the Ollama container logs
+    ports:
+      - "9105:9105"                         # Prometheus /metrics
+    restart: unless-stopped
+    depends_on:
+      - ollama
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: dgx-demo-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    depends_on:
+      - ollama-exporter
+
+  loki:
+    image: grafana/loki:3.2.1
+    container_name: dgx-demo-loki
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki:/loki
+    ports:
+      - "3100:3100"
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.2.1
+    container_name: dgx-demo-promtail
+    command: ["-config.file=/etc/promtail/promtail-config.yml"]
+    volumes:
+      - ./observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # discover + tail the Ollama container
+    restart: unless-stopped
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: dgx-demo-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ALLOW_EMBEDDING=true        # allow the dashboard to embed Grafana in an <iframe>
+      - GF_AUTH_ANONYMOUS_ENABLED=true          # local-only: open the dashboard with no login
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_USERS_DEFAULT_THEME=dark
+      - GF_ANALYTICS_REPORTING_ENABLED=false    # airgap: never phone home
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_NEWS_NEWS_FEED_ENABLED=false
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana:/var/lib/grafana
+    ports:
+      - "3000:3000"                             # Grafana UI -> http://localhost:3000
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - loki
+
+volumes:
+  ollama:
+  prometheus:
+  loki:
+  grafana:
