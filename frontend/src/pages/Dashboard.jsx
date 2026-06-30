@@ -24,6 +24,7 @@ import {
   ArrowUpFromLine,
   Boxes,
   Image as ImageIcon,
+  Bot,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Card, StatCard, Badge, SectionTitle } from "../components/ui.jsx";
@@ -80,9 +81,17 @@ export default function Dashboard({ metrics, connected }) {
   const [vllm, setVllm] = useState(null);
   const [dashTunnel, setDashTunnel] = useState(null);
   const [studio, setStudio] = useState(null);
+  const [ollama, setOllama] = useState(null);
 
   useEffect(() => {
     const tick = () => api.modelStatus().then(setVllm).catch(() => {});
+    tick();
+    const id = setInterval(tick, 4000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const tick = () => api.ollamaMetrics().then(setOllama).catch(() => setOllama(null));
     tick();
     const id = setInterval(tick, 4000);
     return () => clearInterval(id);
@@ -124,6 +133,7 @@ export default function Dashboard({ metrics, connected }) {
   const loadedModels = (vllm?.running ? 1 : 0) + studioLoaded;
   const recent = m.recent_requests || [];
   const carbonIntensity = m.carbon_intensity_g_per_kwh;
+  const ollamaRecent = ollama?.recent_requests || [];
   const studioMetrics = m.studio || {};
   const studioTotals = studioMetrics.totals || {};
   const studioRecent = studioMetrics.recent || [];
@@ -189,6 +199,131 @@ export default function Dashboard({ metrics, connected }) {
             </div>
           </div>
         </div>
+      </Card>
+
+      {/* Copilot hors-ligne (Ollama) : requêtes & débit du modèle chargé */}
+      <Card className="relative overflow-hidden border-violet-500/30">
+        <div className="absolute inset-0 bg-gradient-to-r from-violet-500/10 to-transparent" />
+        <div className="relative flex flex-wrap items-center justify-between gap-6">
+          <div>
+            <div className="flex items-center gap-2 text-violet-300">
+              <Bot size={18} />
+              <span className="label text-violet-300">Copilot hors-ligne (Ollama)</span>
+              {ollama?.available && ollama?.loaded ? (
+                <Badge tone={ollama.generating ? "green" : "violet"}>
+                  {ollama.generating ? "● en génération" : "chargé"}
+                </Badge>
+              ) : (
+                <Badge tone="slate">inactif</Badge>
+              )}
+            </div>
+            <div className="mt-1 flex items-baseline gap-2">
+              <span className="font-mono text-4xl font-extrabold text-white tabular-nums sm:text-5xl">
+                {fmt(ollama?.tokens_per_second)}
+              </span>
+              <span className="text-lg text-slate-300">tokens/s</span>
+            </div>
+            <p className="mt-1 text-sm text-slate-400">
+              {ollama?.available && ollama?.model?.name ? (
+                <>
+                  Modèle&nbsp;:{" "}
+                  <span className="font-mono text-violet-300">{ollama.model.name}</span>
+                  {ollama.model.params ? ` · ${ollama.model.params}` : ""}
+                  {ollama.model.processor ? ` · ${ollama.model.processor}` : ""}
+                  {ollama.generating ? "" : " · débit du dernier échange"}
+                </>
+              ) : (
+                "Aucun modèle Ollama chargé — lancez-en un depuis l'onglet « Copilot hors-ligne »."
+              )}
+            </p>
+          </div>
+          <div className="grid w-full grid-cols-3 gap-4 text-center sm:w-auto sm:gap-6">
+            <div>
+              <div className="font-mono text-2xl font-bold text-white">
+                {fmt(ollama?.requests)}
+              </div>
+              <div className="label">Requêtes</div>
+            </div>
+            <div>
+              <div className="font-mono text-2xl font-bold text-white">
+                {fmt(ollama?.generated_tokens_total)}
+              </div>
+              <div className="label">Tokens générés</div>
+            </div>
+            <div>
+              <div className="font-mono text-2xl font-bold text-white">
+                {fmt(ollama?.turns)}
+              </div>
+              <div className="label">Échanges</div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Historique des 5 dernières requêtes Copilot hors-ligne (énergie & CO2) */}
+      <Card>
+        <SectionTitle
+          icon={Bot}
+          title="5 dernières requêtes · Copilot hors-ligne"
+          subtitle="Tokens, énergie consommée et émissions CO₂ par requête Ollama"
+          right={
+            carbonIntensity != null ? (
+              <span className="flex items-center gap-1 font-mono text-xs text-emerald-400">
+                <Leaf size={14} /> {carbonIntensity} gCO₂/kWh · France
+              </span>
+            ) : null
+          }
+        />
+        {ollamaRecent.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="label border-b border-ink-border text-left">
+                  <th className="py-2 pr-4 font-medium">Heure</th>
+                  <th className="py-2 pr-4 text-right font-medium">
+                    <span className="inline-flex items-center gap-1">
+                      <ArrowDownToLine size={13} /> Entrée
+                    </span>
+                  </th>
+                  <th className="py-2 pr-4 text-right font-medium">
+                    <span className="inline-flex items-center gap-1">
+                      <ArrowUpFromLine size={13} /> Sortie
+                    </span>
+                  </th>
+                  <th className="py-2 pr-4 text-right font-medium">Débit</th>
+                  <th className="py-2 pr-4 text-right font-medium">Énergie</th>
+                  <th className="py-2 text-right font-medium">CO₂</th>
+                </tr>
+              </thead>
+              <tbody className="font-mono text-white">
+                {ollamaRecent.map((r, i) => (
+                  <tr key={i} className="border-b border-ink-border/50 last:border-0">
+                    <td className="py-2 pr-4 text-slate-300">
+                      {new Date(r.ts * 1000).toLocaleTimeString("fr-FR")}
+                    </td>
+                    <td className="py-2 pr-4 text-right">{fmt(r.tokens_in)}</td>
+                    <td className="py-2 pr-4 text-right">{fmt(r.tokens_out)}</td>
+                    <td className="py-2 pr-4 text-right text-violet-300">
+                      {fmt(r.gen_tps)} <span className="text-slate-500">t/s</span>
+                    </td>
+                    <td className="py-2 pr-4 text-right text-amber-400">
+                      {fmtEnergy(r.energy_wh)}
+                    </td>
+                    <td className="py-2 text-right text-emerald-400">
+                      {fmtCo2(r.co2_g)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">
+            Aucune requête Copilot hors-ligne enregistrée pour le moment. Lancez
+            une conversation avec le modèle Ollama chargé pour voir apparaître la
+            consommation énergétique et les émissions CO₂.
+          </p>
+        )}
       </Card>
 
       {/* Dernières requêtes : tokens, énergie & CO2 (mix France) */}

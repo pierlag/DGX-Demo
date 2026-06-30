@@ -20,6 +20,7 @@ import json
 import shutil
 import subprocess
 import time
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -44,6 +45,47 @@ def _which_version(binary: str, *version_args: str) -> dict[str, Any]:
     return {"installed": True, "path": path, "version": version}
 
 
+def _vscode_ollama_config() -> dict[str, Any]:
+    """Detect whether VS Code Copilot is configured to use the local Ollama.
+
+    Reads VS Code's ``chatLanguageModels.json`` (the file that registers extra
+    chat model providers) and reports whether an Ollama provider pointing at the
+    local endpoint is declared. Checks the standard and Insiders user dirs.
+    """
+    home = Path.home()
+    candidates = [
+        home / ".config/Code/User/chatLanguageModels.json",
+        home / ".config/Code - Insiders/User/chatLanguageModels.json",
+        home / ".vscode-server/data/User/chatLanguageModels.json",
+        # macOS / Windows fallbacks
+        home / "Library/Application Support/Code/User/chatLanguageModels.json",
+        home / "AppData/Roaming/Code/User/chatLanguageModels.json",
+    ]
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            entries = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            continue
+        if not isinstance(entries, list):
+            continue
+        port = str(settings.ollama_port)
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            vendor = str(entry.get("vendor", "")).lower()
+            url = str(entry.get("url", ""))
+            if vendor == "ollama" or "ollama" in url or port in url:
+                return {
+                    "configured": True,
+                    "path": str(path),
+                    "name": entry.get("name", ""),
+                    "url": url,
+                }
+    return {"configured": False, "path": "", "name": "", "url": ""}
+
+
 class CopilotTester:
     # -------------------------------------------------------------- tooling
     def cli_status(self) -> dict[str, Any]:
@@ -63,10 +105,14 @@ class CopilotTester:
             except Exception:  # noqa: BLE001
                 chat_ext = False
 
+        ollama_cfg = _vscode_ollama_config()
+
         return {
             "copilot_cli": copilot,
             "vscode": code,
             "vscode_copilot_chat": chat_ext,
+            "vscode_ollama_configured": ollama_cfg["configured"],
+            "vscode_ollama_config": ollama_cfg,
         }
 
     async def _models(self) -> list[str]:

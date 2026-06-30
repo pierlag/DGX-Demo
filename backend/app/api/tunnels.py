@@ -41,11 +41,12 @@ class ReportRequest(BaseModel):
 
 @router.get("/defaults")
 def defaults():
-    """Suggested tunnels for this deployment (dashboard + MCP server)."""
+    """Suggested tunnels for this deployment (dashboard + MCP server + Ollama)."""
     return {
         "tunnels": [
             {"name": "dashboard", "port": settings.dashboard_port},
             {"name": "mcp", "port": settings.mcp_port},
+            {"name": "ollama", "port": settings.ollama_port},
         ]
     }
 

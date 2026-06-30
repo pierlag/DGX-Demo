@@ -154,6 +154,15 @@ class MetricsStore:
             self.indexed_chunks = chunks
 
     # --- readers ---
+    def current_power_w(self) -> float:
+        """Latest GPU power draw (W), or the configured fallback if none yet."""
+        with self._lock:
+            return (
+                self.gpu_history[-1].power_w
+                if self.gpu_history
+                else settings.inference_power_w
+            )
+
     def tokens_per_second(self, window_s: float = 10.0) -> float:
         now = time.time()
         with self._lock:

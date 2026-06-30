@@ -127,6 +127,7 @@ export const api = {
   ollamaTags: (name) => req(`/api/ollama/tags?name=${encodeURIComponent(name)}`),
   ollamaModels: () => req("/api/ollama/models"),
   ollamaShow: (name) => req(`/api/ollama/show?name=${encodeURIComponent(name)}`),
+  ollamaMetrics: () => req("/api/ollama/metrics"),
   ollamaPull: (model, signal) =>
     fetch("/api/ollama/pull", { method: "POST", headers: J, body: JSON.stringify({ model }), signal }),
   ollamaLoad: (name) =>

@@ -56,6 +56,15 @@ async def show(name: str):
     return await ollama_manager.model_info(name)
 
 
+@router.get("/metrics")
+async def metrics():
+    """Live request count + throughput for the loaded Ollama model.
+
+    Surfaced on the main dashboard next to the vLLM metrics.
+    """
+    return await ollama_manager.runtime_metrics()
+
+
 @router.post("/pull")
 async def pull(req: PullRequest):
     async def gen():

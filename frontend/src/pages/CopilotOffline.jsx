@@ -46,10 +46,16 @@ function CopyButton({ text, label = "Copier" }) {
   );
 }
 
-function StatusPill({ ok, label, hint }) {
+function StatusPill({ ok, label, hint, tone }) {
+  // tone overrides the ok->green/red mapping; "neutral" renders an informative
+  // grey dot for optional/non-blocking checks.
+  const dotTone = tone || (ok ? "ok" : "error");
+  const dotClass =
+    { ok: "bg-brand", error: "bg-rose-500", neutral: "bg-slate-500" }[dotTone] ||
+    "bg-rose-500";
   return (
     <div className="flex items-center gap-2 rounded-xl border border-ink-border px-3 py-2">
-      <span className={`h-2.5 w-2.5 rounded-full ${ok ? "bg-brand" : "bg-rose-500"}`} />
+      <span className={`h-2.5 w-2.5 rounded-full ${dotClass}`} />
       <div className="min-w-0">
         <div className="text-sm font-semibold text-slate-100">{label}</div>
         {hint && <div className="truncate text-xs text-slate-500">{hint}</div>}
@@ -418,15 +424,33 @@ export default function CopilotOffline() {
           hint={cli?.copilot_cli?.installed ? cli.copilot_cli.version || "installé" : "non installé"}
         />
         <StatusPill
-          ok={cli?.vscode_copilot_chat}
+          ok={cli?.vscode_copilot_chat || cli?.vscode_ollama_configured}
+          tone={
+            cli?.vscode_copilot_chat || cli?.vscode_ollama_configured
+              ? "ok"
+              : "neutral"
+          }
           label="VS Code · Copilot Chat"
-          hint={cli?.vscode_copilot_chat ? "extension présente" : cli?.vscode?.installed ? "extension manquante" : "VS Code absent"}
+          hint={
+            cli?.vscode_ollama_configured
+              ? "Ollama configuré dans Copilot"
+              : cli?.vscode_copilot_chat
+              ? "extension présente"
+              : cli?.vscode?.installed
+              ? "Ollama non configuré (optionnel)"
+              : "poste client (optionnel)"
+          }
         />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <button className="btn-primary" onClick={() => containerAction(true)} disabled={busy || status?.container_running}>
-          <Power size={16} /> Démarrer Ollama
+        <button
+          className="btn-primary"
+          onClick={() => containerAction(true)}
+          disabled={busy || (status?.container_running && endpointUp)}
+        >
+          <Power size={16} />{" "}
+          {status?.container_running && !endpointUp ? "Réparer Ollama" : "Démarrer Ollama"}
         </button>
         <button className="btn-ghost" onClick={() => containerAction(false)} disabled={busy || !status?.container_running}>
           <PowerOff size={16} /> Arrêter

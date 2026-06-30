@@ -94,6 +94,10 @@ class Settings(BaseSettings):
     ollama_port: int = 11434
     ollama_container_name: str = "dgx-demo-ollama"
     ollama_image: str = "ollama/ollama:0.30.10"
+    # Port published by the Ollama Prometheus exporter (see docker-compose.yml).
+    # The backend scrapes it to surface live request/throughput stats for the
+    # loaded Ollama model on the main dashboard.
+    ollama_exporter_port: int = 9105
 
     # --- Grafana (embedded observability dashboards) ---
     # Port the Grafana container publishes; the dashboard embeds it in an iframe.
@@ -147,6 +151,10 @@ class Settings(BaseSettings):
     @property
     def ollama_openai_url(self) -> str:
         return f"http://{self.ollama_host}:{self.ollama_port}/v1"
+
+    @property
+    def ollama_exporter_url(self) -> str:
+        return f"http://{self.ollama_host}:{self.ollama_exporter_port}"
 
     def ensure_dirs(self) -> None:
         for d in (self.rag_docs_dir, self.models_dir, self.state_dir,

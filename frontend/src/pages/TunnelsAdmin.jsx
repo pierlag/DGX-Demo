@@ -11,6 +11,7 @@ import {
   RefreshCw,
   LayoutDashboard,
   Network,
+  Bot,
   Bug,
   LogOut,
 } from "lucide-react";
@@ -454,12 +455,17 @@ export default function TunnelsAdmin() {
       <Card>
         <SectionTitle
           title="Créer un tunnel standard"
-          subtitle="Dashboard (5173) et serveur MCP (9000)"
+          subtitle="Dashboard (5173), serveur MCP (9000) et Copilot hors-ligne (11434)"
         />
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {defaults.map((d) => {
             const live = tunnels.find((t) => t.name === d.name);
-            const Icon = d.name === "dashboard" ? LayoutDashboard : Network;
+            const Icon =
+              d.name === "dashboard"
+                ? LayoutDashboard
+                : d.name === "ollama"
+                ? Bot
+                : Network;
             const isBusy = busy === `create:${d.name}`;
             return (
               <div
