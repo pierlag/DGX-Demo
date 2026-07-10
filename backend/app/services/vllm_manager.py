@@ -47,6 +47,7 @@ class VllmState:
     params: dict[str, Any] = field(default_factory=dict)
     container_id: str = ""
     message: str = ""
+    error: str = ""  # NEW: startup/runtime error surfaced in the dashboard
     runtime: str = "docker"  # NEW: track which runtime (docker or native)
 
 
@@ -61,6 +62,13 @@ class VllmManager:
         if self._docker_bin is None:
             self._docker_bin = shutil.which("docker")
         return self._docker_bin
+
+    def _fail(self, msg: str) -> VllmState:
+        """Reset state to a clean startup-failure so the dashboard shows 'Échec'."""
+        self.state = VllmState(
+            running=False, error=msg, message=msg, runtime=self.state.runtime
+        )
+        return self.state
 
     @staticmethod
     def _resolve_tool_parser(model: str) -> str:
@@ -91,6 +99,29 @@ class VllmManager:
             return []
         parser = p.tool_call_parser.strip() or self._resolve_tool_parser(p.model)
         return ["--enable-auto-tool-choice", "--tool-call-parser", parser]
+
+    @staticmethod
+    def _servable_error(model_path: Path) -> str | None:
+        """Return an error if a local model dir is NOT servable by vLLM.
+
+        vLLM only serves text-generation models, which expose a HF ``config.json``
+        (or a Mistral ``params.json``). Image->3D (TRELLIS.2, uses ``pipeline.json``)
+        and text->image models have no such config and crash vLLM at startup with
+        an opaque "Invalid repository ID or local directory" error. Catch this
+        early and point the user to the Studio 3D page instead.
+        """
+        if (model_path / "config.json").exists() or (model_path / "params.json").exists():
+            return None
+        if (model_path / "pipeline.json").exists() or (model_path / "texturing_pipeline.json").exists():
+            return (
+                f"« {model_path.name} » est un modèle image→3D (TRELLIS.2) qui ne peut "
+                "pas être servi par vLLM. Utilisez la page « Studio 3D » pour le charger."
+            )
+        return (
+            f"« {model_path.name} » n'est pas servable par vLLM : aucun 'config.json' "
+            "(ni 'params.json' Mistral) trouvé. Seuls les modèles de génération de "
+            "texte sont pris en charge ici."
+        )
 
     def _to_docker_args(self, p: LaunchParams) -> list[str]:
         """CLI args for Docker mode (model mounted as /models)."""
@@ -146,20 +177,24 @@ class VllmManager:
         """Launch vLLM inside a Docker container."""
         docker = self._docker()
         if not docker:
-            self.state.message = "Docker introuvable."
-            return self.state
+            return self._fail("Docker introuvable.")
 
         model_path = settings.models_dir / p.model
         if not model_path.exists():
-            self.state.message = f"Modèle non trouvé: {model_path}. Téléchargez-le d'abord."
-            return self.state
+            return self._fail(
+                f"Modèle non trouvé: {model_path}. Téléchargez-le d'abord."
+            )
+
+        servable_err = self._servable_error(model_path)
+        if servable_err:
+            return self._fail(servable_err)
 
         subprocess.run([docker, "rm", "-f", settings.vllm_container_name],
                       capture_output=True)
 
         def _build_cmd(image: str) -> list[str]:
             return [
-                docker, "run", "-d", "--rm",
+                docker, "run", "-d",
                 "--name", settings.vllm_container_name,
                 "--gpus", "all",
                 "--ipc=host",
@@ -185,11 +220,10 @@ class VllmManager:
                     res_fb = subprocess.run(_build_cmd(self._public_fallback_image),
                                           capture_output=True, text=True, timeout=120)
                     if res_fb.returncode != 0:
-                        self.state.message = (
+                        return self._fail(
                             f"Image {configured_image} indisponible | "
                             f"fallback {self._public_fallback_image} échoué"
                         )
-                        return self.state
                     return VllmState(
                         running=True,
                         model=p.served_model_name or p.model,
@@ -198,8 +232,7 @@ class VllmManager:
                         message=f"Fallback {self._public_fallback_image}. Démarrage…",
                         runtime="docker",
                     )
-                self.state.message = err
-                return self.state
+                return self._fail(err)
             container_id = res.stdout.strip()[:12]
             # Detect an immediate crash (e.g. bad tool-call-parser) and surface logs.
             early = self._check_early_exit(docker, container_id)
@@ -210,6 +243,7 @@ class VllmManager:
                     params={**p.__dict__, "docker_image": configured_image},
                     container_id=container_id,
                     message=f"Le conteneur vLLM s'est arrêté au démarrage : {early}",
+                    error=early,
                     runtime="docker",
                 )
                 return self.state
@@ -222,7 +256,7 @@ class VllmManager:
                 runtime="docker",
             )
         except Exception as exc:
-            self.state.message = str(exc)
+            return self._fail(str(exc))
         return self.state
 
     def _check_early_exit(self, docker: str, container_id: str) -> str | None:
@@ -254,15 +288,21 @@ class VllmManager:
         try:
             import vllm  # noqa: F401
         except ImportError:
-            self.state.message = (
+            return self._fail(
                 "vLLM n'est pas installé. Installez via: pip install vllm"
             )
-            return self.state
 
         # Stop any previous native process
         if self._proc and self._proc.poll() is None:
             self._proc.terminate()
             time.sleep(1)
+
+        # Reject non-LLM local models (e.g. TRELLIS.2 image->3D) before starting.
+        local_path = settings.models_dir / p.model
+        if local_path.exists() and local_path.is_dir():
+            servable_err = self._servable_error(local_path)
+            if servable_err:
+                return self._fail(servable_err)
 
         cmd = [
             sys.executable, "-m", "vllm.entrypoints.openai.api_server",
@@ -280,15 +320,63 @@ class VllmManager:
                 runtime="native",
             )
         except Exception as exc:
-            self.state.message = str(exc)
+            return self._fail(str(exc))
         return self.state
 
     def launch(self, p: LaunchParams) -> VllmState:
         """Launch vLLM using the specified runtime (docker or native)."""
+        # Clear any previous startup error before a fresh attempt.
+        self.state.error = ""
         if p.runtime == "native":
             return self._launch_native(p)
         else:
             return self._launch_docker(p)
+
+    def _detect_failure(self) -> str | None:
+        """Return an error string if a *running* vLLM has actually crashed.
+
+        Used during the loading phase (before /health is ready) to catch a
+        container/process that died mid-startup and surface its logs.
+        """
+        if self.state.runtime == "native":
+            if self._proc is not None and self._proc.poll() is not None:
+                code = self._proc.returncode
+                err = ""
+                try:
+                    if self._proc.stderr:
+                        err = self._proc.stderr.read() or ""
+                except Exception:
+                    err = ""
+                lines = [ln.strip() for ln in err.splitlines() if ln.strip()]
+                tail = " | ".join(lines[-8:])[-800:]
+                return tail or f"Processus vLLM terminé (code {code})."
+            return None
+
+        # Docker runtime
+        docker = self._docker()
+        cid = self.state.container_id
+        if not docker or not cid:
+            return None
+        try:
+            insp = subprocess.run(
+                [docker, "inspect", "-f", "{{.State.Status}}", cid],
+                capture_output=True, text=True, timeout=10,
+            )
+            if insp.returncode != 0:
+                return "Conteneur vLLM introuvable (arrêté au démarrage)."
+            st = insp.stdout.strip()
+            if st in ("running", "created", "restarting"):
+                return None  # still loading normally
+            logs = subprocess.run(
+                [docker, "logs", "--tail", "40", cid],
+                capture_output=True, text=True, timeout=10,
+            )
+            output = (logs.stderr or "") + (logs.stdout or "")
+            lines = [ln.strip() for ln in output.splitlines() if ln.strip()]
+            tail = " | ".join(lines[-8:]) if lines else f"Conteneur arrêté (état {st})."
+            return tail[:800]
+        except Exception:
+            return None
 
     def stop(self) -> VllmState:
         """Stop vLLM (Docker or native subprocess)."""
@@ -316,9 +404,29 @@ class VllmManager:
         if self.state.runtime == "native" and self._proc and self._proc.poll() is not None:
             self.state.running = False
 
+        # Detect a crash during the loading phase and surface the logs so the
+        # dashboard can show "Échec" with the error message.
+        if self.state.running and not ready:
+            err = self._detect_failure()
+            if err:
+                self.state.running = False
+                self.state.error = err
+                self.state.message = f"Échec du démarrage de vLLM : {err}"
+
+        if self.state.error and not self.state.running:
+            status = "failed"
+        elif self.state.running and ready:
+            status = "ready"
+        elif self.state.running:
+            status = "loading"
+        else:
+            status = "stopped"
+
         return {
             "running": self.state.running,
             "ready": ready,
+            "status": status,
+            "error": self.state.error,
             "model": self.state.model,
             "runtime": self.state.runtime,
             "params": self.state.params,

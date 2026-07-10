@@ -10,7 +10,9 @@ import {
   Loader2,
   RotateCw,
   Trash2,
+  Box,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Card, SectionTitle, Badge, Field, Spinner } from "../components/ui.jsx";
 import { api } from "../api.js";
 
@@ -206,6 +208,11 @@ export default function ModelsAdmin() {
     }));
   const dgxModels = [...curated, ...extraDownloaded];
 
+  // Models served by the Studio 3D pipeline (image->3D / text->image), NOT by
+  // vLLM. Selecting/launching them via vLLM crashes with an opaque config error.
+  const NON_LLM_KINDS = ["image-to-3d", "text-to-image"];
+  const servableByVllm = (m) => !NON_LLM_KINDS.includes(m.kind);
+
   return (
     <div className="space-y-6">
       <SectionTitle
@@ -255,12 +262,22 @@ export default function ModelsAdmin() {
                 <div className="mt-3 flex gap-2">
                   {done ? (
                     <>
-                      <button
-                        className="btn-primary flex-1 justify-center"
-                        onClick={() => setSelected(m.id)}
-                      >
-                        <CheckCircle2 size={16} /> Sélectionner
-                      </button>
+                      {servableByVllm(m) ? (
+                        <button
+                          className="btn-primary flex-1 justify-center"
+                          onClick={() => setSelected(m.id)}
+                        >
+                          <CheckCircle2 size={16} /> Sélectionner
+                        </button>
+                      ) : (
+                        <Link
+                          to="/studio3d"
+                          className="btn-primary flex-1 justify-center"
+                          title="Ce modèle est servi par le Studio 3D, pas par vLLM"
+                        >
+                          <Box size={16} /> Ouvrir dans Studio 3D
+                        </Link>
+                      )}
                       <button
                         className="btn-ghost justify-center text-rose-400 hover:text-rose-300"
                         title="Supprimer du disque"

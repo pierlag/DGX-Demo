@@ -25,6 +25,7 @@ import {
   Boxes,
   Image as ImageIcon,
   Bot,
+  AlertTriangle,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Card, StatCard, Badge, SectionTitle } from "../components/ui.jsx";
@@ -641,7 +642,33 @@ export default function Dashboard({ metrics, connected }) {
       {/* Active model details */}
       <Card>
         <SectionTitle icon={Cpu} title="Modèle actif" subtitle="État du serveur vLLM" />
-        {vllm?.running ? (
+        {vllm?.status === "failed" || (vllm?.error && !vllm?.running) ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <Detail label="Nom du modèle" value={vllm.model || "—"} />
+              <Detail label="État" value="Échec" tone="red" />
+              <Detail label="Runtime" value={vllm.runtime || "—"} />
+              <Detail
+                label="max_model_len"
+                value={vllm.params?.max_model_len || "—"}
+              />
+            </div>
+            <div>
+              <div className="label mb-1 flex items-center gap-1 text-rose-300">
+                <AlertTriangle size={13} /> Message d'erreur
+              </div>
+              <textarea
+                readOnly
+                value={
+                  vllm.error ||
+                  vllm.message ||
+                  "Erreur inconnue lors du démarrage de vLLM."
+                }
+                className="h-32 w-full resize-y rounded-xl border border-rose-500/40 bg-ink-950/60 p-3 font-mono text-xs leading-relaxed text-rose-200"
+              />
+            </div>
+          </div>
+        ) : vllm?.running ? (
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <Detail label="Nom du modèle" value={vllm.model} />
             <Detail
